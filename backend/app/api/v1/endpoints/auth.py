@@ -34,6 +34,13 @@ async def _check_rate_limit(db: AsyncSession, phone: str):
 
 def _send_otp_sms(phone: str, otp: str):
     """Send OTP via Twilio. Only called when USE_DEV_OTP=false."""
+    if not all([
+        settings.TWILIO_ACCOUNT_SID,
+        settings.TWILIO_AUTH_TOKEN,
+        settings.TWILIO_PHONE_NUMBER,
+    ]):
+        raise HTTPException(500, "Twilio SMS is not configured")
+
     from twilio.rest import Client
     client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
     client.messages.create(

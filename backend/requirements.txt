@@ -16,5 +16,5 @@ aiofiles==24.1.0
 # ── Optional: only needed when USE_LOCAL_STORAGE=false ───────────────────────
 # boto3==1.35.32
 
-# ── Optional: only needed when USE_DEV_OTP=false ─────────────────────────────
-# twilio==9.3.4
+# ── SMS OTP, used when USE_DEV_OTP=false ─────────────────────────────────────
+twilio==9.3.4
