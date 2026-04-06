@@ -37,24 +37,6 @@ def _phone_without_plus(phone: str) -> str:
     return phone.lstrip("+").replace(" ", "")
 
 
-def _send_otp_via_twilio(phone: str, otp: str):
-    """Send OTP via Twilio."""
-    if not all([
-        settings.TWILIO_ACCOUNT_SID,
-        settings.TWILIO_AUTH_TOKEN,
-        settings.TWILIO_PHONE_NUMBER,
-    ]):
-        raise HTTPException(500, "Twilio SMS is not configured")
-
-    from twilio.rest import Client
-    client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-    client.messages.create(
-        to=phone,
-        from_=settings.TWILIO_PHONE_NUMBER,
-        body=f"Your SplitSure OTP is {otp}. Valid for {settings.OTP_EXPIRE_MINUTES} minutes.",
-    )
-
-
 async def _send_otp_via_msg91(phone: str, otp: str):
     """Send OTP via MSG91 SendOTP."""
     if not all([settings.MSG91_AUTHKEY, settings.MSG91_TEMPLATE_ID]):
@@ -85,9 +67,6 @@ async def _send_otp_sms(phone: str, otp: str):
     if provider == "msg91":
         await _send_otp_via_msg91(phone, otp)
         return
-    if provider == "twilio":
-        _send_otp_via_twilio(phone, otp)
-        return
     raise HTTPException(500, f"Unsupported SMS provider: {settings.SMS_PROVIDER}")
 
 
@@ -110,7 +89,7 @@ async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
         return {
             "message": "OTP generated (dev mode — no SMS sent)",
             "dev_otp": otp,
-            "dev_note": "Set USE_DEV_OTP=false and configure Twilio to enable real SMS",
+            "dev_note": "Set USE_DEV_OTP=false and configure MSG91 to enable real SMS",
         }
     else:
         # ── PRODUCTION MODE ───────────────────────────────────────────

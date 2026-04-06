@@ -30,14 +30,11 @@ class Settings(BaseSettings):
     # In dev mode (USE_DEV_OTP=true) the OTP is returned in the API response
     # instead of being sent via SMS.
     USE_DEV_OTP: bool = True
-    SMS_PROVIDER: str = "twilio"
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_PHONE_NUMBER: str = ""
+    SMS_PROVIDER: str = "msg91"
     MSG91_AUTHKEY: str = ""
     MSG91_TEMPLATE_ID: str = ""
     OTP_EXPIRE_MINUTES: int = 10
-    OTP_MAX_REQUESTS_PER_HOUR: int = 5
+    OTP_MAX_REQUESTS_PER_HOUR: int = 20
 
     # CORS
     ALLOWED_ORIGINS: List[str] = [
