@@ -1,0 +1,290 @@
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from app.core.database import get_db
+from app.core.security import get_current_user
+from app.models.user import (
+    Expense, Split, Settlement, SettlementStatus,
+    GroupMember, MemberRole, User, AuditEventType
+)
+from app.schemas.schemas import (
+    GroupBalancesOut, BalanceSummary, SettlementInstruction,
+    SettlementCreate, SettlementOut, DisputeSettlementRequest, ResolveDisputeRequest
+)
+from app.services.settlement_engine import compute_net_balances, minimize_transactions, build_upi_deep_link
+from app.services.audit_service import log_event
+
+router = APIRouter(prefix="/groups/{group_id}/settlements", tags=["settlements"])
+
+
+async def _require_membership(db, group_id, user_id):
+    result = await db.execute(
+        select(GroupMember)
+        .where(GroupMember.group_id == group_id)
+        .where(GroupMember.user_id == user_id)
+    )
+    member = result.scalar_one_or_none()
+    if not member:
+        raise HTTPException(403, "Not a member of this group")
+    return member
+
+
+@router.get("/balances", response_model=GroupBalancesOut)
+async def get_balances(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_membership(db, group_id, current_user.id)
+
+    # Load all non-deleted, non-settled expenses with their splits
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.splits))
+        .where(Expense.group_id == group_id)
+        .where(Expense.is_deleted == False)
+        .where(Expense.is_settled == False)
+    )
+    expenses = result.scalars().all()
+
+    # Build raw balance data for engine
+    expense_data = []
+    for exp in expenses:
+        splits_list = [(s.user_id, s.amount) for s in exp.splits]
+        expense_data.append((exp.paid_by, splits_list))
+
+    balances = compute_net_balances(expense_data)
+    transactions = minimize_transactions(balances)
+
+    # Load all members to map user details
+    result = await db.execute(
+        select(GroupMember)
+        .options(selectinload(GroupMember.user))
+        .where(GroupMember.group_id == group_id)
+    )
+    members = result.scalars().all()
+    user_map = {m.user_id: m.user for m in members}
+
+    # Build settlement instructions
+    instructions = []
+    for txn in transactions:
+        payer = user_map.get(txn.payer_id)
+        receiver = user_map.get(txn.receiver_id)
+        if not payer or not receiver:
+            continue
+
+        upi_link = None
+        if receiver.upi_id:
+            upi_link = build_upi_deep_link(
+                receiver.upi_id,
+                receiver.name or receiver.phone,
+                txn.amount,
+                f"SplitSure settlement",
+            )
+
+        instructions.append(SettlementInstruction(
+            payer_id=txn.payer_id,
+            payer_name=payer.name or payer.phone,
+            receiver_id=txn.receiver_id,
+            receiver_name=receiver.name or receiver.phone,
+            amount=txn.amount,
+            receiver_upi_id=receiver.upi_id,
+            upi_deep_link=upi_link,
+        ))
+
+    # Build per-member balance summary
+    from app.schemas.schemas import UserOut
+    balance_summaries = []
+    for member_obj in members:
+        uid = member_obj.user_id
+        net = balances.get(uid, 0)
+        member_instructions = [i for i in instructions if i.payer_id == uid]
+        balance_summaries.append(BalanceSummary(
+            user=UserOut.model_validate(member_obj.user),
+            net_balance=net,
+            settlement_instructions=member_instructions,
+        ))
+
+    total_expenses = sum(e.amount for e in expenses)
+
+    return GroupBalancesOut(
+        group_id=group_id,
+        balances=balance_summaries,
+        total_expenses=total_expenses,
+        optimized_settlements=instructions,
+    )
+
+
+@router.post("", response_model=SettlementOut, status_code=201)
+async def initiate_settlement(
+    group_id: int,
+    body: SettlementCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_membership(db, group_id, current_user.id)
+
+    if body.receiver_id == current_user.id:
+        raise HTTPException(400, "Cannot settle with yourself")
+
+    settlement = Settlement(
+        group_id=group_id,
+        payer_id=current_user.id,
+        receiver_id=body.receiver_id,
+        amount=body.amount,
+        status=SettlementStatus.PENDING,
+    )
+    db.add(settlement)
+    await db.flush()
+
+    await log_event(
+        db, group_id, AuditEventType.SETTLEMENT_INITIATED, current_user.id,
+        entity_id=settlement.id,
+        after_json={"payer": current_user.id, "receiver": body.receiver_id, "amount": body.amount},
+    )
+
+    await db.commit()
+
+    result = await db.execute(
+        select(Settlement)
+        .options(
+            selectinload(Settlement.payer),
+            selectinload(Settlement.receiver),
+        )
+        .where(Settlement.id == settlement.id)
+    )
+    return result.scalar_one()
+
+
+@router.post("/{settlement_id}/confirm", response_model=SettlementOut)
+async def confirm_settlement(
+    group_id: int,
+    settlement_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_membership(db, group_id, current_user.id)
+
+    result = await db.execute(
+        select(Settlement)
+        .options(selectinload(Settlement.payer), selectinload(Settlement.receiver))
+        .where(Settlement.id == settlement_id)
+        .where(Settlement.group_id == group_id)
+    )
+    settlement = result.scalar_one_or_none()
+    if not settlement:
+        raise HTTPException(404, "Settlement not found")
+
+    if settlement.receiver_id != current_user.id:
+        raise HTTPException(403, "Only the receiver can confirm a settlement")
+
+    if settlement.status != SettlementStatus.PENDING:
+        raise HTTPException(400, f"Settlement is already {settlement.status.value}")
+
+    settlement.status = SettlementStatus.CONFIRMED
+    settlement.confirmed_at = datetime.now(timezone.utc)
+
+    await log_event(
+        db, group_id, AuditEventType.SETTLEMENT_CONFIRMED, current_user.id,
+        entity_id=settlement_id,
+    )
+
+    await db.commit()
+    await db.refresh(settlement)
+    return settlement
+
+
+@router.post("/{settlement_id}/dispute", response_model=SettlementOut)
+async def dispute_settlement(
+    group_id: int,
+    settlement_id: int,
+    body: DisputeSettlementRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_membership(db, group_id, current_user.id)
+
+    result = await db.execute(
+        select(Settlement)
+        .options(selectinload(Settlement.payer), selectinload(Settlement.receiver))
+        .where(Settlement.id == settlement_id)
+        .where(Settlement.group_id == group_id)
+    )
+    settlement = result.scalar_one_or_none()
+    if not settlement:
+        raise HTTPException(404, "Settlement not found")
+
+    if settlement.receiver_id != current_user.id:
+        raise HTTPException(403, "Only the receiver can dispute a settlement")
+
+    if settlement.status != SettlementStatus.PENDING:
+        raise HTTPException(400, f"Settlement is already {settlement.status.value}")
+
+    settlement.status = SettlementStatus.DISPUTED
+    settlement.dispute_note = body.note
+
+    await log_event(
+        db, group_id, AuditEventType.SETTLEMENT_DISPUTED, current_user.id,
+        entity_id=settlement_id,
+        metadata_json={"note": body.note},
+    )
+
+    await db.commit()
+    await db.refresh(settlement)
+    return settlement
+
+
+@router.post("/{settlement_id}/resolve", response_model=SettlementOut)
+async def resolve_settlement_dispute(
+    group_id: int,
+    settlement_id: int,
+    body: ResolveDisputeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    member = await _require_membership(db, group_id, current_user.id)
+    if member.role != MemberRole.ADMIN:
+        raise HTTPException(403, "Only admins can resolve disputes")
+
+    result = await db.execute(
+        select(Settlement)
+        .options(selectinload(Settlement.payer), selectinload(Settlement.receiver))
+        .where(Settlement.id == settlement_id)
+        .where(Settlement.group_id == group_id)
+    )
+    settlement = result.scalar_one_or_none()
+    if not settlement:
+        raise HTTPException(404, "Settlement not found")
+
+    settlement.status = SettlementStatus.CONFIRMED
+    settlement.resolution_note = body.resolution_note
+    settlement.confirmed_at = datetime.now(timezone.utc)
+
+    await log_event(
+        db, group_id, AuditEventType.DISPUTE_RESOLVED, current_user.id,
+        entity_id=settlement_id,
+        metadata_json={"resolution_note": body.resolution_note},
+    )
+
+    await db.commit()
+    await db.refresh(settlement)
+    return settlement
+
+
+@router.get("", response_model=list[SettlementOut])
+async def list_settlements(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_membership(db, group_id, current_user.id)
+
+    result = await db.execute(
+        select(Settlement)
+        .options(selectinload(Settlement.payer), selectinload(Settlement.receiver))
+        .where(Settlement.group_id == group_id)
+        .order_by(Settlement.created_at.desc())
+    )
+    return result.scalars().all()

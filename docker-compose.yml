@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL (local DB — no AWS needed) ────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: splitsure
+      POSTGRES_PASSWORD: splitsure_dev
+      POSTGRES_DB: splitsure
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U splitsure"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── FastAPI Backend ──────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://splitsure:splitsure_dev@db:5432/splitsure
+
+      # Security
+      SECRET_KEY: dev-secret-key-change-in-production
+
+      # Local storage (no AWS needed)
+      USE_LOCAL_STORAGE: "true"
+      LOCAL_UPLOAD_DIR: /app/uploads
+      LOCAL_BASE_URL: http://localhost:8000
+
+      # Dev OTP (no Twilio needed — OTP returned in API response)
+      USE_DEV_OTP: "true"
+
+      # CORS
+      ALLOWED_ORIGINS: '["http://localhost:8081","http://localhost:19006","http://10.0.2.2:8000"]'
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app            # hot-reload source
+      - uploads_data:/app/uploads # persisted proof files on local disk
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
+  uploads_data:   # named volume so uploaded files survive container restarts
+

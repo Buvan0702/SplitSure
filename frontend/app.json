@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "SplitSure",
+    "slug": "splitsure",
+    "version": "1.0.0",
+    "scheme": "splitsure",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": ["expo-router"],
+    "android": {
+      "package": "com.splitsure.app",
+      "usesCleartextTraffic": true
+    }
+  }
+}
