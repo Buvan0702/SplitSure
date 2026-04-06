@@ -47,16 +47,21 @@ async def _send_otp_via_msg91(phone: str, otp: str):
         "mobile": _phone_without_plus(phone),
         "authkey": settings.MSG91_AUTHKEY,
         "otp": otp,
+        "otp_expiry": settings.OTP_EXPIRE_MINUTES,
     }
     async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.get("https://control.msg91.com/api/v5/otp", params=params)
+        response = await client.post(
+            "https://control.msg91.com/api/v5/otp",
+            params=params,
+            json={},
+        )
 
     try:
         payload = response.json()
     except ValueError:
         payload = {"message": response.text}
 
-    if response.status_code >= 400 or payload.get("type") == "error":
+    if response.status_code >= 400 or payload.get("type") != "success":
         message = payload.get("message") or payload.get("error") or response.text
         status_code = response.status_code if response.status_code >= 400 else status.HTTP_502_BAD_GATEWAY
         raise HTTPException(status_code, f"MSG91 SMS failed: {message}")
