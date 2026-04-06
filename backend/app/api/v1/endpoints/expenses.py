@@ -313,7 +313,13 @@ async def upload_attachment(
     )
     db.add(attachment)
     await db.commit()
-    await db.refresh(attachment)
+
+    result = await db.execute(
+        select(ProofAttachment)
+        .options(selectinload(ProofAttachment.uploader))
+        .where(ProofAttachment.id == attachment.id)
+    )
+    attachment = result.scalar_one()
 
     result_out = ProofAttachmentOut.model_validate(attachment)
     result_out.presigned_url = generate_presigned_url(s3_key)

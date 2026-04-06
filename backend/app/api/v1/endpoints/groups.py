@@ -170,8 +170,13 @@ async def add_member(
     )
 
     await db.commit()
-    await db.refresh(member)
-    return member
+    result = await db.execute(
+        select(GroupMember)
+        .options(selectinload(GroupMember.user))
+        .where(GroupMember.group_id == group_id)
+        .where(GroupMember.user_id == new_user.id)
+    )
+    return result.scalar_one()
 
 
 @router.delete("/{group_id}/members/{user_id}", status_code=204)
@@ -255,8 +260,13 @@ async def join_via_invite(
     )
 
     await db.commit()
-    await db.refresh(member)
-    return member
+    result = await db.execute(
+        select(GroupMember)
+        .options(selectinload(GroupMember.user))
+        .where(GroupMember.group_id == invite.group_id)
+        .where(GroupMember.user_id == current_user.id)
+    )
+    return result.scalar_one()
 
 
 @router.delete("/{group_id}", status_code=204)

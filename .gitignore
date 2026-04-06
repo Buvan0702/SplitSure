@@ -40,7 +40,3 @@ backend/uploads/
 Thumbs.db
 .vscode/
 .idea/
-
-# Accidental brace-expansion folders
-{backend,frontend}/
-backend/{app/
