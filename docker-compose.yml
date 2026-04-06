@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ─── PostgreSQL (local DB — no AWS needed) ────────────────────────
   db:
@@ -26,33 +24,46 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
+      PORT: "${PORT:-8000}"
+
       # Database
-      DATABASE_URL: postgresql+asyncpg://splitsure:splitsure_dev@db:5432/splitsure
+      DATABASE_URL: "postgresql+asyncpg://splitsure:zXMZ3gDfA8zdEO57kjGjqXExN9jOQKTW@dpg-d79rdojuibrs738abbd0-a/splitsure"
+
 
       # Security
-      SECRET_KEY: dev-secret-key-change-in-production
+      SECRET_KEY: "${SECRET_KEY:-dev-secret-key-change-in-production-use-32-chars-min}"
 
       # Local storage (no AWS needed)
-      USE_LOCAL_STORAGE: "true"
-      LOCAL_UPLOAD_DIR: /app/uploads
-      LOCAL_BASE_URL: http://localhost:8000
+      USE_LOCAL_STORAGE: "${USE_LOCAL_STORAGE:-true}"
+      LOCAL_UPLOAD_DIR: "${LOCAL_UPLOAD_DIR:-/app/uploads}"
+      LOCAL_BASE_URL: "${LOCAL_BASE_URL:-https://splitsure.onrender.com}"
+
+      # AWS S3 (leave blank while using local storage)
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_REGION: "${AWS_REGION:-ap-south-1}"
+      S3_BUCKET_NAME: "${S3_BUCKET_NAME:-splitsure-proofs}"
 
       # Dev OTP (no Twilio needed — OTP returned in API response)
-      USE_DEV_OTP: "true"
+      USE_DEV_OTP: "${USE_DEV_OTP:-true}"
+
+      # Twilio (leave blank while USE_DEV_OTP=true)
+      TWILIO_ACCOUNT_SID: "${TWILIO_ACCOUNT_SID:-}"
+      TWILIO_AUTH_TOKEN: "${TWILIO_AUTH_TOKEN:-}"
+      TWILIO_PHONE_NUMBER: "${TWILIO_PHONE_NUMBER:-}"
 
       # CORS
-      ALLOWED_ORIGINS: '["http://localhost:8081","http://localhost:19006","http://10.0.2.2:8000"]'
+      ALLOWED_ORIGINS: '${ALLOWED_ORIGINS:-["http://localhost:3000","http://localhost:8081","http://localhost:19006","http://10.0.2.2:8000","https://splitsure.onrender.com"]}'
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./backend:/app            # hot-reload source
       - uploads_data:/app/uploads # persisted proof files on local disk
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "uvicorn app.main:app --host 0.0.0.0 --port $${PORT:-8000} --reload"
 
 volumes:
   postgres_data:
   uploads_data:   # named volume so uploaded files survive container restarts
-
