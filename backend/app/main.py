@@ -46,9 +46,5 @@ async def health_check():
         "status": "ok",
         "version": "1.0.0",
         "storage": "local" if settings.USE_LOCAL_STORAGE else "s3",
-        "otp_mode": (
-            "dev (returned in response)"
-            if settings.USE_DEV_OTP
-            else f"sms ({settings.SMS_PROVIDER})"
-        ),
+        "otp_mode": "dev (returned in response)",
     }

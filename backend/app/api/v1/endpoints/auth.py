@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import random
 import hashlib
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
@@ -33,48 +32,6 @@ async def _check_rate_limit(db: AsyncSession, phone: str):
         raise HTTPException(429, "Too many OTP requests. Try again in an hour.")
 
 
-def _phone_without_plus(phone: str) -> str:
-    return phone.lstrip("+").replace(" ", "")
-
-
-async def _send_otp_via_msg91(phone: str, otp: str):
-    """Send OTP via MSG91 SendOTP."""
-    if not all([settings.MSG91_AUTHKEY, settings.MSG91_TEMPLATE_ID]):
-        raise HTTPException(500, "MSG91 SMS is not configured")
-
-    params = {
-        "template_id": settings.MSG91_TEMPLATE_ID,
-        "mobile": _phone_without_plus(phone),
-        "authkey": settings.MSG91_AUTHKEY,
-        "otp": otp,
-        "otp_expiry": settings.OTP_EXPIRE_MINUTES,
-    }
-    async with httpx.AsyncClient(timeout=20) as client:
-        response = await client.post(
-            "https://control.msg91.com/api/v5/otp",
-            params=params,
-            json={},
-        )
-
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = {"message": response.text}
-
-    if response.status_code >= 400 or payload.get("type") != "success":
-        message = payload.get("message") or payload.get("error") or response.text
-        status_code = response.status_code if response.status_code >= 400 else status.HTTP_502_BAD_GATEWAY
-        raise HTTPException(status_code, f"MSG91 SMS failed: {message}")
-
-
-async def _send_otp_sms(phone: str, otp: str):
-    provider = settings.SMS_PROVIDER.lower().strip()
-    if provider == "msg91":
-        await _send_otp_via_msg91(phone, otp)
-        return
-    raise HTTPException(500, f"Unsupported SMS provider: {settings.SMS_PROVIDER}")
-
-
 @router.post("/send-otp")
 async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
     await _check_rate_limit(db, body.phone)
@@ -87,24 +44,11 @@ async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
     db.add(record)
     await db.commit()
 
-    if settings.USE_DEV_OTP:
-        # ── DEV MODE ─────────────────────────────────────────────────
-        # OTP returned directly in response. No SMS sent.
-        # Remove / set USE_DEV_OTP=false in production.
-        return {
-            "message": "OTP generated (dev mode — no SMS sent)",
-            "dev_otp": otp,
-            "dev_note": "Set USE_DEV_OTP=false and configure MSG91 to enable real SMS",
-        }
-    else:
-        # ── PRODUCTION MODE ───────────────────────────────────────────
-        try:
-            await _send_otp_sms(body.phone, otp)
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(500, f"Failed to send SMS: {str(e)}")
-        return {"message": "OTP sent via SMS"}
+    return {
+        "message": "OTP generated (dev mode — no SMS sent)",
+        "dev_otp": otp,
+        "dev_note": "Development mode returns OTP directly in the API response.",
+    }
 
 
 @router.post("/verify-otp", response_model=TokenResponse)

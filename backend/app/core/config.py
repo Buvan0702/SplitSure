@@ -26,13 +26,9 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str = "splitsure-proofs"
     S3_PRESIGNED_URL_EXPIRY: int = 900         # 15 minutes
 
-    # OTP / SMS
-    # In dev mode (USE_DEV_OTP=true) the OTP is returned in the API response
-    # instead of being sent via SMS.
+    # OTP
+    # Dev mode returns OTP in the API response instead of sending SMS.
     USE_DEV_OTP: bool = True
-    SMS_PROVIDER: str = "msg91"
-    MSG91_AUTHKEY: str = ""
-    MSG91_TEMPLATE_ID: str = ""
     OTP_EXPIRE_MINUTES: int = 10
     OTP_MAX_REQUESTS_PER_HOUR: int = 20
 
