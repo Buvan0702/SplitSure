@@ -27,7 +27,7 @@ services:
       PORT: "${PORT:-8000}"
 
       # Database
-      DATABASE_URL: "postgresql+asyncpg://splitsure:zXMZ3gDfA8zdEO57kjGjqXExN9jOQKTW@dpg-d79rdojuibrs738abbd0-a/splitsure"
+      DATABASE_URL: "postgresql+asyncpg://splitsure:splitsure_dev@db:5432/splitsure"
 
 
       # Security
@@ -36,7 +36,7 @@ services:
       # Local storage (no AWS needed)
       USE_LOCAL_STORAGE: "${USE_LOCAL_STORAGE:-true}"
       LOCAL_UPLOAD_DIR: "${LOCAL_UPLOAD_DIR:-/app/uploads}"
-      LOCAL_BASE_URL: "${LOCAL_BASE_URL:-https://splitsure.onrender.com}"
+      LOCAL_BASE_URL: "${LOCAL_BASE_URL:-http://10.0.2.2:8000}"
 
       # AWS S3 (leave blank while using local storage)
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"

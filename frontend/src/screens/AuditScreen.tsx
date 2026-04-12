@@ -47,7 +47,7 @@ function AuditEntry({ log }: { log: AuditLog }) {
               <Text style={styles.actorName}>{actorName}</Text>
               {' '}<Text style={styles.eventLabel}>{meta.label}</Text>
             </Text>
-            <Text style={styles.timeAgo} title={exactTime}>{timeAgo}</Text>
+            <Text style={styles.timeAgo}>{timeAgo} · {exactTime}</Text>
           </View>
         </View>
 

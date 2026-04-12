@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#0b0e17",
+                    "surface-container-highest": "#212533",
+                    "on-primary-fixed-variant": "#0e009d",
+                    "on-tertiary-fixed-variant": "#004f69",
+                    "surface-container-low": "#10131d",
+                    "surface-container": "#161924",
+                    "outline-variant": "#454852",
+                    "secondary-dim": "#00ec9a",
+                    "surface-container-high": "#1b1f2c",
+                    "surface-container-lowest": "#000000",
+                    "on-tertiary": "#004f69",
+                    "on-secondary-fixed": "#00452a",
+                    "inverse-primary": "#494bd7",
+                    "surface-tint": "#a3a6ff",
+                    "tertiary-container": "#7bd1fa",
+                    "surface-variant": "#212533",
+                    "on-error": "#490013",
+                    "inverse-surface": "#faf8ff",
+                    "on-error-container": "#ffb2b9",
+                    "on-primary-container": "#0a0081",
+                    "on-secondary-fixed-variant": "#00653f",
+                    "background": "#0b0e17",
+                    "tertiary-fixed": "#7bd1fa",
+                    "outline": "#727581",
+                    "on-secondary-container": "#e1ffe9",
+                    "error": "#ff6e84",
+                    "error-container": "#a70138",
+                    "tertiary-fixed-dim": "#6cc3eb",
+                    "secondary": "#1dfba5",
+                    "on-primary-fixed": "#000000",
+                    "inverse-on-surface": "#525560",
+                    "on-secondary": "#005a38",
+                    "on-primary": "#0f00a4",
+                    "secondary-fixed": "#1dfba5",
+                    "primary-container": "#9396ff",
+                    "tertiary": "#9bddff",
+                    "primary-dim": "#6063ee",
+                    "tertiary-dim": "#6cc3eb",
+                    "on-tertiary-container": "#00465d",
+                    "surface-bright": "#272c3a",
+                    "primary-fixed": "#9396ff",
+                    "on-surface-variant": "#a8aab7",
+                    "primary": "#a3a6ff",
+                    "surface-dim": "#0b0e17",
+                    "secondary-fixed-dim": "#00ec9a",
+                    "on-tertiary-fixed": "#003041",
+                    "error-dim": "#d73357",
+                    "on-surface": "#e9eaf8",
+                    "primary-fixed-dim": "#8387ff",
+                    "secondary-container": "#006c44",
+                    "on-background": "#e9eaf8"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      .glass-card {
+        background: rgba(33, 37, 51, 0.8);
+        backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .conic-border {
+        position: relative;
+        padding: 1px;
+        background: conic-gradient(from 0deg, #6366F1, #00F5A0, #6366F1);
+        border-radius: 20px;
+      }
+      .conic-inner {
+        background: #0b0e17;
+        border-radius: 20px;
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30">
+<!-- Top AppBar (from JSON) -->
+<header class="fixed top-0 w-full z-50 bg-[#0b0e17]/80 backdrop-blur-3xl flex justify-between items-center px-6 pt-12 pb-4 w-full">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-primary/20">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="Close-up portrait of a professional man with friendly expression, neutral studio background, soft cinematic lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtcf9iyDAwnxrD59xyj8Xt-GPjVLflKOJ6ZuoLoAAVEw5WOCzUxKjHFyltza09Fr2DaRIu-40nqKgnQ6kqTECpgNM2WrxF3nhzWOn_HOG_A5bLcrKGWFlBDUU-gPBtpxcnNIdgAk_NE-9L5HsDSD6LrDE6ef8iQoTkvVInj56U3n_B3s3Vyv6L8nAEOCHcmdKcyK2w2GGtbNiD5RUcw6aXUob3VUAytMjI-f-MWjYfOxmEb-7xszgO-zwbeK1BeIXTKPnKak5vrFtU"/>
+</div>
+<h1 class="text-2xl font-bold bg-gradient-to-r from-[#6366F1] to-[#00F5A0] bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(99,102,241,0.5)] font-['Space_Grotesk'] tracking-tighter uppercase">SPLITSURE</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-[#6366F1] text-2xl cursor-pointer hover:opacity-80 transition-opacity">settings</span>
+</div>
+</header>
+<main class="pt-32 pb-32 px-6 max-w-2xl mx-auto space-y-8">
+<!-- Header Section -->
+<section class="flex items-end justify-between">
+<div class="space-y-1">
+<h2 class="text-[28px] font-headline font-bold tracking-tight text-on-surface">SETTLE UP</h2>
+<div class="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">bolt</span>
+<span class="font-label text-[11px] font-bold tracking-wider text-primary uppercase">3 TXNS SAVED</span>
+</div>
+</div>
+<div class="text-right">
+<p class="font-label text-on-surface-variant text-[10px] tracking-widest uppercase">Net Settlement</p>
+<p class="font-headline text-2xl font-bold text-secondary">₹1,420.00</p>
+</div>
+</section>
+<!-- Balance Matrix -->
+<section class="glass-card rounded-[20px] p-8 aspect-square relative flex items-center justify-center overflow-hidden">
+<!-- Background Radial Glow -->
+<div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.1),transparent_70%)]"></div>
+<!-- Nodes and Arrows (Conceptual UI Representation) -->
+<div class="relative w-full h-full flex items-center justify-center">
+<!-- SVG Network Graph -->
+<svg class="absolute inset-0 w-full h-full" viewbox="0 0 400 400">
+<!-- Arrows -->
+<path d="M 200 80 L 200 320" fill="none" marker-end="url(#arrowhead-red)" stroke="#ff6e84" stroke-dasharray="8 4" stroke-width="4"></path>
+<path d="M 80 200 L 320 200" fill="none" marker-end="url(#arrowhead-green)" stroke="#1dfba5" stroke-width="2"></path>
+<path d="M 120 120 L 280 280" fill="none" marker-end="url(#arrowhead-green)" stroke="#1dfba5" stroke-width="6"></path>
+<defs>
+<marker id="arrowhead-red" markerheight="7" markerwidth="10" orient="auto" refx="10" refy="3.5">
+<polygon fill="#ff6e84" points="0 0, 10 3.5, 0 7"></polygon>
+</marker>
+<marker id="arrowhead-green" markerheight="7" markerwidth="10" orient="auto" refx="10" refy="3.5">
+<polygon fill="#1dfba5" points="0 0, 10 3.5, 0 7"></polygon>
+</marker>
+</defs>
+</svg>
+<!-- Avatar Nodes -->
+<!-- Top -->
+<div class="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-full border-2 border-primary ring-4 ring-primary/10 overflow-hidden bg-surface">
+<img alt="Priya" class="w-full h-full object-cover" data-alt="Portrait of a young woman with a warm smile, outdoor lighting, natural skin tones" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAWcT77ydUBflrmvB1rJlEIm9XM6nxxESRpQ734FSHPpkvUbfNRSF5MnOXD54049g_cFLFBn-7mDwDZ-mLCFxak_Kb3lIAFXNKHyDZpVeob9aVg9yc2Tjq0PCBiI7qpg6LsPYfNDaew72GvPlSaQPyQTcM1tTS1PFYp0Rba1yf1c9W4kr9GSdSfTjKcfNK8JrJ41z_CqYRRQT5hTQkj1c_VBD-Fs5VUfIgqkW9AjiG2DAjLiPYFmtDeHHrKu0wCkwgWLFa9Z4VpUQKz"/>
+</div>
+<span class="font-label text-[10px] font-bold tracking-widest text-on-surface uppercase bg-surface/80 px-2 py-0.5 rounded-full">PRIYA</span>
+</div>
+<!-- Bottom -->
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-full border-2 border-outline-variant overflow-hidden bg-surface">
+<img alt="Rahul" class="w-full h-full object-cover" data-alt="Portrait of a man in his late 20s, neutral background, professional headshot style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPY0NKM2BbN7TFI7Hf2mr46TnMaGoDy0JEVJKP9G2yPPx5MFfddrjGXlVnIfGK6KgAbJ4H420r9ZYSkJHKn4hD4nzIHFxqzVfDdJgXWKR0I2JKgUeGFss4S7xDP5eiqC-wArlflsYoa2t9GpxtohckI6ul9ZRCD011zalQQ00ipEYM9aZ2ZlBO13i8dbsyr_ADYRBKYbuMv-oSKK5Cenf27oXWBMDMUwrt4ZgNuNzS4a_VKg7pZkTZQMdiYxnNnMG9KQe-VIz-9YPE"/>
+</div>
+<span class="font-label text-[10px] font-bold tracking-widest text-on-surface uppercase bg-surface/80 px-2 py-0.5 rounded-full">RAHUL</span>
+</div>
+<!-- Left -->
+<div class="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-full border-2 border-outline-variant overflow-hidden bg-surface">
+<img alt="Ankit" class="w-full h-full object-cover" data-alt="Close up face of a man with clean beard, soft daylight, blurred urban background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtcVSLv_9BkhAK8Biqy-DvdOaPEuN65QVnf8asCrjsxhqHrGny2F36Tu9MQdCwSTlu4yDRctnBa7ejfyWO_9M6SRG62JNbVuVfNKsms9Xuf-3fAdWdzyKS-bekDnS6K-6X9Q6LO6scQib_jvGhwcDNdZpusyRzSkrHJ9mjWiKF8cNzjVxIcnW2Q_rH8InRDxoTjG26W3c1wVxf3QUtQaV2ySNiygBgfhigEYx_Ti-PR3SbkLVEcMZEvQQK7I1d3uEu3xKtHpz__Re_"/>
+</div>
+<span class="font-label text-[10px] font-bold tracking-widest text-on-surface uppercase bg-surface/80 px-2 py-0.5 rounded-full">ANKIT</span>
+</div>
+<!-- Right -->
+<div class="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-full border-2 border-outline-variant overflow-hidden bg-surface">
+<img alt="Sana" class="w-full h-full object-cover" data-alt="Confident woman in business attire, looking at camera, studio soft box lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMl2WNpnoLX04_IW37xru9oJBv9ags3PtdBGud8CThGaEHQ1z0kL8SxyQB7G3sVfdc-Ui97_hyBEDss_iGPNLsSF9oFtUpzuKzEGSis6If_mYGGoeLSBZja_Ti5Sr_TKVWqYmGDD1eUCgUR8s9Lg7pOv6-Dt447fVFHk7LZhSK4fhBucgGX3zEnKlW2GmCIaMuP5eDyoZvCDnKyiVMvuMDGg7acwAuELUmHNZUKvkarNAbvOmiZIzrC7npPU21KyH7FuduESKpNKRc"/>
+</div>
+<span class="font-label text-[10px] font-bold tracking-widest text-on-surface uppercase bg-surface/80 px-2 py-0.5 rounded-full">SANA</span>
+</div>
+</div>
+</section>
+<!-- Transaction Cards -->
+<section class="space-y-4">
+<div class="glass-card rounded-[20px] p-5 hover:bg-surface-container-high transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="font-['JetBrains_Mono'] text-[10px] text-primary/80 bg-primary/5 px-2 py-1 rounded-lg border border-primary/10 tracking-widest uppercase">TRANSACTION #001</span>
+<span class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#eab308]/10 text-[#eab308] border border-[#eab308]/20 text-[9px] font-bold tracking-widest uppercase">
+<span class="w-1.5 h-1.5 rounded-full bg-[#eab308] animate-pulse"></span> PENDING CONFIRMATION
+                    </span>
+</div>
+<div class="flex items-center justify-between gap-4">
+<div class="flex-1 flex items-center justify-center gap-3">
+<span class="font-headline font-medium text-lg">Priya</span>
+<div class="flex-1 h-px bg-gradient-to-r from-transparent via-error/30 to-transparent relative">
+<span class="absolute inset-0 flex items-center justify-center">
+<span class="bg-surface px-2 font-['JetBrains_Mono'] text-xs font-bold text-error">──₹840──▶</span>
+</span>
+</div>
+<span class="font-headline font-medium text-lg">Rahul</span>
+</div>
+</div>
+</div>
+<div class="glass-card rounded-[20px] p-5 border-secondary/20 bg-secondary/5">
+<div class="flex justify-between items-start mb-4">
+<span class="font-['JetBrains_Mono'] text-[10px] text-secondary/80 bg-secondary/5 px-2 py-1 rounded-lg border border-secondary/10 tracking-widest uppercase">TRANSACTION #002</span>
+<span class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary/10 text-secondary border border-secondary/20 text-[9px] font-bold tracking-widest uppercase">
+<span class="material-symbols-outlined text-[14px]">verified</span> DUAL CONFIRMED · SEALED
+                    </span>
+</div>
+<div class="flex items-center justify-between gap-4">
+<div class="flex-1 flex items-center justify-center gap-3">
+<span class="font-headline font-medium text-lg opacity-60">Ankit</span>
+<div class="flex-1 h-px bg-gradient-to-r from-transparent via-secondary/30 to-transparent relative">
+<span class="absolute inset-0 flex items-center justify-center">
+<span class="bg-[#101c1c] px-2 font-['JetBrains_Mono'] text-xs font-bold text-secondary">──₹580──▶</span>
+</span>
+</div>
+<span class="font-headline font-medium text-lg opacity-60">Sana</span>
+</div>
+</div>
+</div>
+<div class="glass-card rounded-[20px] p-5 border-error/20">
+<div class="flex justify-between items-start mb-4">
+<span class="font-['JetBrains_Mono'] text-[10px] text-error/80 bg-error/5 px-2 py-1 rounded-lg border border-error/10 tracking-widest uppercase">TRANSACTION #003</span>
+<span class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 text-error border border-error/20 text-[9px] font-bold tracking-widest uppercase">
+<span class="material-symbols-outlined text-[14px]">block</span> DISPUTED · FROZEN
+                    </span>
+</div>
+<div class="flex items-center justify-between gap-4">
+<div class="flex-1 flex items-center justify-center gap-3">
+<span class="font-headline font-medium text-lg">Sana</span>
+<div class="flex-1 h-px bg-error/20 relative">
+<span class="absolute inset-0 flex items-center justify-center">
+<span class="bg-surface px-2 font-['JetBrains_Mono'] text-xs font-bold text-error/50 line-through">──₹2,400──▶</span>
+</span>
+</div>
+<span class="font-headline font-medium text-lg">Priya</span>
+</div>
+</div>
+</div>
+</section>
+<!-- UPI Row -->
+<section class="grid grid-cols-3 gap-4">
+<button class="glass-card flex flex-col items-center justify-center py-4 rounded-xl hover:bg-surface-container-high transition-transform active:scale-95 group">
+<div class="w-8 h-8 rounded-full bg-[#1A73E8]/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+<img alt="GPay" class="w-5 h-5" data-alt="Google Pay iconic multi-colored logo on clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD69d18DIZLPVIiyB1xHL58ZkJT6NHq3HTiVvX1myhkZQ9RjEPG-m1H3CERhXMbfLu3U2jgehK6WdkXuA3DBVRgD0bh8jb9SeC7au5lpZzrnJLnISnh13IC2hUG6g1ayt1ORX5tQKIQsb1XPn-9l4ByN4THrEUjHjD6oX1mvYZ7XHeA6JTQGQLMBBO9Ws5656sXC2kMO9XxsWvDx3CG35JBmC9kiYCQ17q_eOJ229Hr1VWdPeQY-epF8MvSUV6lhwlp_0HIGLm-EV4Q"/>
+</div>
+<span class="font-label text-[9px] font-bold tracking-widest uppercase text-on-surface-variant">GPay</span>
+</button>
+<button class="glass-card flex flex-col items-center justify-center py-4 rounded-xl hover:bg-surface-container-high transition-transform active:scale-95 group">
+<div class="w-8 h-8 rounded-full bg-[#5f259f]/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+<img alt="PhonePe" class="w-5 h-5" data-alt="PhonePe brand logo with purple accent and stylized text" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXPQcZJ5wzgDx9-d265hlzDcn8QkSqZBBJRpaALLof2AwVT4lc5_tRrHWKeRairNvLuyg2lOPnOMO33SKVRdgy4B5xRETFTd3nTrHGZhHuFDLFnKkLE0S_h4qOVLd1YTMGuAAIUmV8pxOl7bLrBnv-bS-2xm9vbktwO-dcSxezGBI2_QmFv_8X0LHqMfgC_CChbHh9e5EHzDF31nayE1Ui1U4Nr0FgiocA_cDgqzSD0YjfBPYKy3uuvu3Jz519rixVskh4oEM5ng48"/>
+</div>
+<span class="font-label text-[9px] font-bold tracking-widest uppercase text-on-surface-variant">PhonePe</span>
+</button>
+<button class="glass-card flex flex-col items-center justify-center py-4 rounded-xl hover:bg-surface-container-high transition-transform active:scale-95 group">
+<div class="w-8 h-8 rounded-full bg-[#00baf2]/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+<img alt="Paytm" class="w-5 h-5" data-alt="Paytm minimalist blue and light blue brand identity logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARxH_-kcNaeadD8WRWUUgiA_rXYnX2tOjNTPzD5ds-PuWDyzPD7z_XoiVbhzJj-CA3rxE7Hi-fZ0pyhpgL5mq1x7YNe5f0QgvcLAqNyIXPtWL3XmkkQwu3ArxYaT_eX1LEahCx9IX08krNUy47KhMOVeMsAJQmZvTVLfED6j4TOHfmpiItPPUQzRNidGt4zJ5rFyyqfic5rpIOL9ixjm6INTa24rZMAbU_cdPEGDyzHS56YDM9LsxlXWBf6uJ7_GigY63TctU8ZuZR"/>
+</div>
+<span class="font-label text-[9px] font-bold tracking-widest uppercase text-on-surface-variant">Paytm</span>
+</button>
+</section>
+<!-- Premium Bottom Button -->
+<section class="conic-border group">
+<button class="conic-inner w-full py-5 px-6 flex items-center justify-between hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+<span class="material-symbols-outlined text-surface text-2xl" style="font-variation-settings: 'FILL' 1;">crown</span>
+</div>
+<div class="text-left">
+<h4 class="font-headline font-bold text-sm tracking-wide text-on-surface">GENERATE PROOF REPORT</h4>
+<p class="font-label text-[10px] text-on-surface-variant leading-tight">Legally binding PDF with cryptographic signatures</p>
+</div>
+</div>
+<div class="flex flex-col items-end gap-1">
+<span class="bg-[#f59e0b]/10 text-[#f59e0b] text-[9px] font-black px-2 py-0.5 rounded border border-[#f59e0b]/20 tracking-tighter">PAID</span>
+<span class="material-symbols-outlined text-primary group-hover:translate-x-1 transition-transform">arrow_forward_ios</span>
+</div>
+</button>
+</section>
+</main>
+<!-- BottomNavBar (from JSON) -->
+<nav class="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-[#212533]/80 backdrop-blur-3xl rounded-[32px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex justify-around items-center py-4 px-2 z-50">
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#1dfba5] drop-shadow-[0_0_8px_rgba(29,251,165,0.6)] active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Groups</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1">analytics</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Activity</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1">person</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Profile</span>
+</a>
+</nav>
+</body></html>

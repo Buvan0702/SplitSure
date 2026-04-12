@@ -1,273 +1,401 @@
-import React, { useState, useRef } from 'react';
-import {
-  View, Text, StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, TextInput, TouchableOpacity, Animated,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
-import { Button, Input } from '../components/ui';
+import { LinearGradient } from 'expo-linear-gradient';
+import { AxiosError } from 'axios';
+import { AppBackdrop } from '../components/chrome';
+import { Button, Card, Input } from '../components/ui';
+import { Colors, Radius, Shadow, Spacing, Typography } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
-type Step = 'phone' | 'otp';
+type Step = 'splash' | 'phone' | 'otp';
+
+function getAuthErrorMessage(error: unknown, fallback: string) {
+  const axiosError = error as AxiosError<{ detail?: string }>;
+  const detail = axiosError.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (axiosError.code === 'ECONNABORTED') {
+    return 'Server is waking up. Please wait a moment and try again.';
+  }
+  if (axiosError.message === 'Network Error') {
+    return 'Cannot reach the server. Check your internet connection and backend URL.';
+  }
+  return fallback;
+}
 
 export default function LoginScreen() {
   const router = useRouter();
   const { sendOTP, verifyOTP } = useAuthStore();
-
-  const [step, setStep] = useState<Step>('phone');
+  const [step, setStep] = useState<Step>('splash');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [phoneError, setPhoneError] = useState('');
-
   const otpRefs = useRef<Array<TextInput | null>>([]);
-  const slideAnim = useRef(new Animated.Value(0)).current;
 
-  const handleSendOTP = async () => {
-    setPhoneError('');
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length < 10) {
-      setPhoneError('Please enter a valid 10-digit mobile number');
+  useEffect(() => {
+    const timer = setTimeout(() => setStep('phone'), 1600);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const cleanedPhone = phone.replace(/\D/g, '');
+
+  const handleSendOtp = async () => {
+    if (cleanedPhone.length !== 10) {
+      setError('Enter a valid 10-digit mobile number');
       return;
     }
 
     setLoading(true);
+    setError('');
     try {
-      const res = await sendOTP(phone.startsWith('+') ? phone : `+91${cleaned}`);
-      setStep('otp');
-      Animated.spring(slideAnim, {
-        toValue: 1, useNativeDriver: true, tension: 80, friction: 10,
-      }).start();
-
-      // ── DEV MODE: auto-fill OTP returned from API ─────────────────
-      if (res?.dev_otp) {
-        const digits = String(res.dev_otp).split('');
-        setOtp(digits);
+      const result = await sendOTP(`+91${cleanedPhone}`);
+      if (result.dev_otp) {
+        setOtp(String(result.dev_otp).split('').slice(0, 6));
       }
-    } catch (e: any) {
-      setPhoneError(e?.response?.data?.detail || 'Failed to send OTP');
+      setStep('otp');
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Failed to send OTP'));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOTPChange = (value: string, index: number) => {
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    setError('');
-
-    if (value && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
-    if (!value && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-    }
-
-    if (newOtp.every(d => d)) {
-      handleVerifyOTP(newOtp.join(''));
-    }
-  };
-
-  const handleVerifyOTP = async (code?: string) => {
-    const otpCode = code || otp.join('');
-    if (otpCode.length !== 6) {
-      setError('Please enter the complete 6-digit OTP');
+  const submitOtp = async (code = otp.join('')) => {
+    if (code.length !== 6) {
+      setError('Enter the full 6-digit OTP');
       return;
     }
 
     setLoading(true);
     setError('');
     try {
-      const cleanedPhone = phone.replace(/\D/g, '');
-      await verifyOTP(`+91${cleanedPhone}`, otpCode);
-      router.replace('/(tabs)/');
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Invalid OTP. Please try again.');
+      await verifyOTP(`+91${cleanedPhone}`, code);
+      router.replace('/(tabs)');
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Invalid OTP'));
       setOtp(['', '', '', '', '', '']);
-      otpRefs.current[0]?.focus();
     } finally {
       setLoading(false);
     }
+  };
+
+  const setOtpDigit = (value: string, index: number) => {
+    const next = [...otp];
+    next[index] = value.slice(-1);
+    setOtp(next);
+    if (value && index < 5) otpRefs.current[index + 1]?.focus();
+    if (next.every(Boolean)) submitOtp(next.join(''));
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoIcon}>🔐</Text>
+    <AppBackdrop>
+      {step === 'splash' ? (
+        <View style={styles.splash}>
+          <View style={styles.ringLarge} />
+          <View style={styles.ringMedium} />
+          <View style={styles.ringSmall} />
+          <View style={styles.logoDisc}>
+            <Text style={styles.logoGlyph}>S</Text>
           </View>
-          <Text style={styles.logoText}>SplitSure</Text>
-          <Text style={styles.tagline}>Smart Expense Split with Proof & Accountability</Text>
-        </View>
-
-        {/* Card */}
-        <View style={[styles.card, Shadow.lg]}>
-          {step === 'phone' ? (
-            <>
-              <Text style={styles.cardTitle}>Welcome!</Text>
-              <Text style={styles.cardSub}>Enter your mobile number to get started</Text>
-
-              <Input
-                label="Mobile Number"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                placeholder="98765 43210"
-                maxLength={10}
-                error={phoneError}
-                leftIcon={<Text style={styles.countryCode}>🇮🇳 +91</Text>}
-                style={{ letterSpacing: 2, fontSize: Typography.md }}
-              />
-
-              <Button
-                title="Send OTP"
-                onPress={handleSendOTP}
-                loading={loading}
-                size="lg"
-                style={{ marginTop: Spacing.sm }}
-              />
-
-              <Text style={styles.terms}>
-                By continuing, you agree to our{' '}
-                <Text style={styles.link}>Terms of Service</Text> and{' '}
-                <Text style={styles.link}>Privacy Policy</Text>
-              </Text>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity onPress={() => setStep('phone')} style={styles.backBtn}>
-                <Text style={styles.backText}>← Change number</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.cardTitle}>Verify OTP</Text>
-              <Text style={styles.cardSub}>
-                Enter the 6-digit code sent to{'\n'}
-                <Text style={styles.phoneBold}>+91 {phone.replace(/\D/g, '')}</Text>
-              </Text>
-
-              {/* OTP Boxes */}
-              <View style={styles.otpRow}>
-                {otp.map((digit, i) => (
-                  <TextInput
-                    key={i}
-                    ref={el => (otpRefs.current[i] = el)}
-                    value={digit}
-                    onChangeText={val => handleOTPChange(val.slice(-1), i)}
-                    keyboardType="numeric"
-                    maxLength={1}
-                    style={[
-                      styles.otpBox,
-                      digit && styles.otpBoxFilled,
-                      error && styles.otpBoxError,
-                    ]}
-                    selectTextOnFocus
-                  />
-                ))}
-              </View>
-
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-              {/* DEV MODE notice */}
-              {otp.every(d => d) && (
-                <View style={styles.devBanner}>
-                  <Text style={styles.devBannerText}>
-                    🛠️ Dev mode — OTP auto-filled from API response
-                  </Text>
-                </View>
-              )}
-
-              <Button
-                title={loading ? 'Verifying...' : 'Verify & Continue'}
-                onPress={() => handleVerifyOTP()}
-                loading={loading}
-                size="lg"
-                style={{ marginTop: Spacing.lg }}
-              />
-
-              <TouchableOpacity onPress={handleSendOTP} style={styles.resendBtn}>
-                <Text style={styles.resendText}>Didn't receive the OTP? <Text style={styles.link}>Resend</Text></Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-
-        {/* Trust badges */}
-        <View style={styles.trustRow}>
-          {['🔒 Secure', '📋 Proof-backed', '✅ Mutual confirm'].map(badge => (
-            <View key={badge} style={styles.trustBadge}>
-              <Text style={styles.trustText}>{badge}</Text>
+          <Text style={styles.brand}>SPLITSURE</Text>
+          <Text style={styles.brandSub}>NEURAL_NET_ALPHA_1.0</Text>
+          <View style={styles.splashFeatures}>
+            {['Greedy-optimized settlements', 'Cryptographic proof vault', 'Immutable audit ledger'].map((feature) => (
+              <Card key={feature} style={styles.splashPill}>
+                <Text style={styles.splashPillText}>{feature}</Text>
+              </Card>
+            ))}
+          </View>
+          <View style={styles.progressWrap}>
+            <Text style={styles.progressLabel}>INITIALIZING SECURE SESSION...</Text>
+            <View style={styles.progressTrack}>
+              <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.progressFill} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} />
             </View>
-          ))}
+          </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.hero}>
+            <View style={styles.logoWrap}>
+              <Text style={styles.heroLogo}>S</Text>
+            </View>
+            <Text style={styles.title}>SPLITSURE</Text>
+            <Text style={styles.subtitle}>Financial Truth. Cryptographic Proof.</Text>
+          </View>
+
+          <View style={styles.chipRow}>
+            {['Zero-Knowledge', 'Immutable Ledger', 'Bank-grade'].map((label) => (
+              <Card key={label} style={styles.trustChip}>
+                <Text style={styles.trustChipText}>{label}</Text>
+              </Card>
+            ))}
+          </View>
+
+          <Card style={styles.formCard}>
+            {step === 'phone' ? (
+              <>
+                <Input
+                  label="Identity Verification"
+                  value={phone}
+                  onChangeText={(value) => {
+                    setPhone(value);
+                    setError('');
+                  }}
+                  keyboardType="phone-pad"
+                  placeholder="Enter mobile number"
+                  leftAddon={<Text style={styles.phonePrefix}>+91</Text>}
+                  error={error}
+                />
+                <Button title="SEND OTP" onPress={handleSendOtp} loading={loading} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.otpHeading}>Verify OTP</Text>
+                <Text style={styles.otpCopy}>Confirm the six-digit secure access code for +91 {cleanedPhone}</Text>
+                <View style={styles.otpRow}>
+                  {otp.map((digit, index) => (
+                    <TextInput
+                      key={index}
+                      ref={(ref) => {
+                        otpRefs.current[index] = ref;
+                      }}
+                      value={digit}
+                      onChangeText={(value) => setOtpDigit(value, index)}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      style={styles.otpBox}
+                    />
+                  ))}
+                </View>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <Button title="VERIFY & CONTINUE" onPress={() => submitOtp()} loading={loading} />
+                <Pressable onPress={() => setStep('phone')} style={{ marginTop: Spacing.base }}>
+                  <Text style={styles.changeNumber}>Change number</Text>
+                </Pressable>
+              </>
+            )}
+            <Text style={styles.terms}>
+              By continuing, you agree to the Sovereign Protocols and Audit Terms.
+            </Text>
+          </Card>
+        </ScrollView>
+      )}
+    </AppBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.base, paddingTop: 60, paddingBottom: Spacing.xxxl },
-
-  header: { alignItems: 'center', marginBottom: Spacing.xl },
-  logoContainer: {
-    width: 80, height: 80, borderRadius: Radius.xl,
-    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
-    marginBottom: Spacing.md, ...Shadow.md,
+  splash: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
   },
-  logoIcon: { fontSize: 36 },
-  logoText: { fontSize: Typography.xxxl, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -1 },
-  tagline: { fontSize: Typography.sm, color: Colors.textTertiary, textAlign: 'center', marginTop: 4, maxWidth: 260 },
-
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.xl,
-    padding: Spacing.xl,
+  ringLarge: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(163,166,255,0.12)',
+  },
+  ringMedium: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(163,166,255,0.18)',
+  },
+  ringSmall: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(163,166,255,0.22)',
+  },
+  logoDisc: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: Colors.glass,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadow.glowMd,
+  },
+  logoGlyph: {
+    color: Colors.primary,
+    fontSize: 64,
+    fontWeight: '800',
+    marginTop: -8,
+  },
+  brand: {
+    color: Colors.textPrimary,
+    fontSize: 46,
+    fontWeight: '800',
+    letterSpacing: 8,
+    marginTop: Spacing.xxxl,
+  },
+  brandSub: {
+    color: 'rgba(163,166,255,0.8)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 3,
+    marginTop: 8,
+  },
+  splashFeatures: {
+    gap: Spacing.sm,
+    marginTop: Spacing.xxxl,
+    width: '100%',
+  },
+  splashPill: {
+    borderRadius: Radius.full,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  splashPillText: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+  },
+  progressWrap: {
+    position: 'absolute',
+    bottom: 80,
+    left: Spacing.xl,
+    right: Spacing.xl,
+  },
+  progressLabel: {
+    color: 'rgba(233,234,248,0.4)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 3,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  progressTrack: {
+    height: 2,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    width: '65%',
+    height: '100%',
+  },
+  scroll: {
+    paddingHorizontal: Spacing.base,
+    paddingTop: 88,
+    paddingBottom: 60,
+    alignItems: 'center',
+  },
+  hero: {
+    alignItems: 'center',
     marginBottom: Spacing.xl,
   },
-  cardTitle: { fontSize: Typography.xl, fontWeight: '800', color: Colors.textPrimary, marginBottom: 6 },
-  cardSub: { fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: Spacing.lg, lineHeight: 20 },
-
-  countryCode: { fontSize: Typography.base, color: Colors.textSecondary, marginRight: 4 },
-
-  otpRow: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: Spacing.md },
+  logoWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: 'rgba(99,102,241,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadow.glowMd,
+  },
+  heroLogo: {
+    color: Colors.primary,
+    fontSize: 46,
+    fontWeight: '800',
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 42,
+    fontWeight: '800',
+    letterSpacing: 6,
+    marginTop: Spacing.xl,
+  },
+  subtitle: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    marginTop: 8,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginBottom: Spacing.xl,
+  },
+  trustChip: {
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  trustChipText: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  formCard: {
+    width: '100%',
+    borderRadius: Radius.xxl,
+  },
+  phonePrefix: {
+    color: Colors.primary,
+    fontSize: Typography.base,
+    fontWeight: '700',
+  },
+  otpHeading: {
+    color: Colors.textPrimary,
+    fontSize: Typography.xl,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  otpCopy: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    marginBottom: Spacing.base,
+  },
+  otpRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginBottom: Spacing.base,
+  },
   otpBox: {
-    width: 46, height: 56, borderRadius: Radius.md,
-    borderWidth: 2, borderColor: Colors.border,
-    backgroundColor: Colors.surfaceAlt,
-    textAlign: 'center', fontSize: Typography.xl,
-    fontWeight: '700', color: Colors.textPrimary,
+    flex: 1,
+    height: 56,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surfaceLowest,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+    color: Colors.textPrimary,
+    textAlign: 'center',
+    fontSize: Typography.xl,
+    fontWeight: '800',
   },
-  otpBoxFilled: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  otpBoxError: { borderColor: Colors.danger },
-  errorText: { color: Colors.danger, fontSize: Typography.sm, textAlign: 'center' },
-
-  backBtn: { marginBottom: Spacing.md },
-  backText: { color: Colors.primary, fontSize: Typography.sm, fontWeight: '600' },
-  phoneBold: { fontWeight: '700', color: Colors.textPrimary },
-
-  terms: { fontSize: Typography.xs, color: Colors.textTertiary, textAlign: 'center', marginTop: Spacing.md, lineHeight: 18 },
-  link: { color: Colors.primary, fontWeight: '600' },
-
-  resendBtn: { alignItems: 'center', marginTop: Spacing.md },
-  resendText: { fontSize: Typography.sm, color: Colors.textTertiary },
-
-  devBanner: {
-    backgroundColor: '#FFF3CD', borderRadius: Radius.sm, padding: Spacing.sm,
-    borderLeftWidth: 3, borderLeftColor: '#FFD93D', marginTop: Spacing.sm,
+  error: {
+    color: Colors.danger,
+    marginBottom: Spacing.base,
   },
-  devBannerText: { fontSize: Typography.xs, color: '#856404', fontWeight: '600' },
-
-  trustRow: { flexDirection: 'row', justifyContent: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
-  trustBadge: {
-    backgroundColor: Colors.surface, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs,
-    borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border,
+  changeNumber: {
+    color: Colors.primary,
+    fontSize: Typography.sm,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  trustText: { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: '600' },
+  terms: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: Spacing.base,
+    lineHeight: 18,
+  },
 });

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SPLITSURE - Login &amp; Onboarding</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#0b0e17",
+                        "surface-container-highest": "#212533",
+                        "on-primary-fixed-variant": "#0e009d",
+                        "on-tertiary-fixed-variant": "#004f69",
+                        "surface-container-low": "#10131d",
+                        "surface-container": "#161924",
+                        "outline-variant": "#454852",
+                        "secondary-dim": "#00ec9a",
+                        "surface-container-high": "#1b1f2c",
+                        "surface-container-lowest": "#000000",
+                        "on-tertiary": "#004f69",
+                        "on-secondary-fixed": "#00452a",
+                        "inverse-primary": "#494bd7",
+                        "surface-tint": "#a3a6ff",
+                        "tertiary-container": "#7bd1fa",
+                        "surface-variant": "#212533",
+                        "on-error": "#490013",
+                        "inverse-surface": "#faf8ff",
+                        "on-error-container": "#ffb2b9",
+                        "on-primary-container": "#0a0081",
+                        "on-secondary-fixed-variant": "#00653f",
+                        "background": "#0b0e17",
+                        "tertiary-fixed": "#7bd1fa",
+                        "outline": "#727581",
+                        "on-secondary-container": "#e1ffe9",
+                        "error": "#ff6e84",
+                        "error-container": "#a70138",
+                        "tertiary-fixed-dim": "#6cc3eb",
+                        "secondary": "#1dfba5",
+                        "on-primary-fixed": "#000000",
+                        "inverse-on-surface": "#525560",
+                        "on-secondary": "#005a38",
+                        "on-primary": "#0f00a4",
+                        "secondary-fixed": "#1dfba5",
+                        "primary-container": "#9396ff",
+                        "tertiary": "#9bddff",
+                        "primary-dim": "#6063ee",
+                        "tertiary-dim": "#6cc3eb",
+                        "on-tertiary-container": "#00465d",
+                        "surface-bright": "#272c3a",
+                        "primary-fixed": "#9396ff",
+                        "on-surface-variant": "#a8aab7",
+                        "primary": "#a3a6ff",
+                        "surface-dim": "#0b0e17",
+                        "secondary-fixed-dim": "#00ec9a",
+                        "on-tertiary-fixed": "#003041",
+                        "error-dim": "#d73357",
+                        "on-surface": "#e9eaf8",
+                        "primary-fixed-dim": "#8387ff",
+                        "secondary-container": "#006c44",
+                        "on-background": "#e9eaf8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "technical": ["JetBrains Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #080B14;
+            background-image: radial-gradient(circle at top center, rgba(99, 102, 241, 0.15), transparent 70%), 
+                              radial-gradient(#ffffff08 1px, transparent 1px);
+            background-size: 100% 100%, 24px 24px;
+            color: #e9eaf8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+        }
+        .logo-glow {
+            filter: drop-shadow(0 0 24px rgba(99, 102, 241, 0.6));
+        }
+        .glass-card {
+            background: rgba(33, 37, 51, 0.4);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body selection:bg-primary/30">
+<!-- Top Navigation (Suppressed for Login per Protocol) -->
+<main class="w-full max-w-lg px-6 py-12 flex flex-col items-center gap-10">
+<!-- Hero Section -->
+<div class="flex flex-col items-center text-center gap-6">
+<!-- Interlocking "S" Logo -->
+<div class="relative w-20 h-20 flex items-center justify-center logo-glow">
+<div class="absolute inset-0 bg-gradient-to-tr from-primary-dim to-inverse-primary rounded-2xl rotate-45 opacity-20"></div>
+<svg class="z-10" fill="none" height="64" viewbox="0 0 64 64" width="64" xmlns="http://www.w3.org/2000/svg">
+<path d="M48 16C48 11.5817 44.4183 8 40 8H24C19.5817 8 16 11.5817 16 16V24C16 28.4183 19.5817 32 24 32H40C44.4183 32 48 35.5817 48 40V48C48 52.4183 44.4183 56 40 56H24C19.5817 56 16 52.4183 16 48" stroke="url(#paint0_linear)" stroke-linecap="round" stroke-width="8"></path>
+<defs>
+<lineargradient gradientunits="userSpaceOnUse" id="paint0_linear" x1="16" x2="48" y1="8" y2="56">
+<stop stop-color="#a3a6ff"></stop>
+<stop offset="1" stop-color="#6063ee"></stop>
+</lineargradient>
+</defs>
+</svg>
+</div>
+<!-- Brand Identity -->
+<div class="space-y-2">
+<h1 class="font-headline text-5xl font-bold tracking-[0.15em] text-on-surface uppercase">SPLITSURE</h1>
+<p class="text-[15px] font-medium text-outline tracking-wide">Financial Truth. Cryptographic Proof.</p>
+</div>
+</div>
+<!-- Trust Chips -->
+<div class="flex flex-wrap justify-center gap-3">
+<div class="glass-card px-4 py-2 rounded-full flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-secondary" data-icon="lock">lock</span>
+<span class="text-[11px] font-technical uppercase tracking-widest text-on-surface-variant">Zero-Knowledge</span>
+</div>
+<div class="glass-card px-4 py-2 rounded-full flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-secondary" data-icon="link">link</span>
+<span class="text-[11px] font-technical uppercase tracking-widest text-on-surface-variant">Immutable Ledger</span>
+</div>
+<div class="glass-card px-4 py-2 rounded-full flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-secondary" data-icon="shield">shield</span>
+<span class="text-[11px] font-technical uppercase tracking-widest text-on-surface-variant">Bank-grade</span>
+</div>
+</div>
+<!-- Form Card -->
+<div class="w-full glass-card rounded-[32px] p-8 space-y-6">
+<div class="space-y-1.5">
+<label class="font-technical text-[10px] text-outline uppercase tracking-widest px-1">Identity Verification</label>
+<div class="group relative flex items-center bg-surface-container-lowest rounded-xl border border-white/5 transition-all duration-300 focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary/50">
+<div class="flex items-center px-4 py-4 gap-2">
+<span class="text-primary font-technical text-sm">+91</span>
+<div class="h-4 w-[1px] bg-white/10"></div>
+</div>
+<input class="w-full bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline-variant font-technical tracking-widest py-4 pr-4" placeholder="Enter mobile number" type="tel"/>
+</div>
+</div>
+<button class="w-full h-14 bg-gradient-to-r from-primary-dim to-inverse-primary rounded-xl font-headline font-bold text-base tracking-widest text-on-primary-fixed uppercase shadow-[0_0_20px_rgba(99,102,241,0.3)] transition-all duration-300 active:scale-[0.98] hover:opacity-90">
+                SEND OTP
+            </button>
+<p class="text-center text-[11px] text-outline-variant font-body">
+                By continuing, you agree to the <span class="text-primary cursor-pointer hover:underline">Sovereign Protocols</span> and <span class="text-primary cursor-pointer hover:underline">Audit Terms</span>.
+            </p>
+</div>
+<!-- Decorative Background Element (Contextual) -->
+<div class="relative w-full h-24 overflow-hidden rounded-2xl opacity-40">
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent"></div>
+<img class="w-full h-full object-cover mix-blend-overlay" data-alt="Abstract 3D visualization of cryptographic data blocks and glowing network nodes in a dark void atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJu3Xhng6EqwY_UJJy6_cEJKJYXrHdQCXPfWu_IN7fWveffNIgBWc_0as1NsZwVoDqY0a9hMpX7vS1PWCWwigYXYDP6KzCQUOHQQSfh9G_vY3mzDqHl8rO2xtXPPQ1-Lm7diPXWSxeZh59WQN-sCAAf3aaBTfFyBICcuCYt38RrnLA4E501j6X5YJs0yyC6MrfVVRd9rUswyi3CGsD8_ANCDQhbH-sk8TITynQ6v2NfWRn4LRZrW72YJMMKsBv3P0aJpHY2jUzqqVE"/>
+</div>
+</main>
+<!-- Footer Security Bar -->
+<footer class="mt-auto pb-8 pt-4 w-full px-6 overflow-hidden">
+<div class="flex items-center justify-center gap-4 text-outline-variant whitespace-nowrap">
+<div class="h-[1px] flex-grow bg-white/5"></div>
+<div class="font-technical text-[9px] tracking-[0.3em] flex gap-4">
+<span>256-BIT ENCRYPTED</span>
+<span class="opacity-30">•</span>
+<span>JWT SECURED</span>
+<span class="opacity-30">•</span>
+<span>AUDIT-LOCKED FOREVER</span>
+</div>
+<div class="h-[1px] flex-grow bg-white/5"></div>
+</div>
+</footer>
+<!-- No BottomNavBar on Login Screen per Protocol Suppression -->
+</body></html>

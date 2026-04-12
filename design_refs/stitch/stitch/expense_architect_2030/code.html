@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Expense Architect - SPLITSURE</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#0b0e17",
+                        "surface-container-highest": "#212533",
+                        "on-primary-fixed-variant": "#0e009d",
+                        "on-tertiary-fixed-variant": "#004f69",
+                        "surface-container-low": "#10131d",
+                        "surface-container": "#161924",
+                        "outline-variant": "#454852",
+                        "secondary-dim": "#00ec9a",
+                        "surface-container-high": "#1b1f2c",
+                        "surface-container-lowest": "#000000",
+                        "on-tertiary": "#004f69",
+                        "on-secondary-fixed": "#00452a",
+                        "inverse-primary": "#494bd7",
+                        "surface-tint": "#a3a6ff",
+                        "tertiary-container": "#7bd1fa",
+                        "surface-variant": "#212533",
+                        "on-error": "#490013",
+                        "inverse-surface": "#faf8ff",
+                        "on-error-container": "#ffb2b9",
+                        "on-primary-container": "#0a0081",
+                        "on-secondary-fixed-variant": "#00653f",
+                        "background": "#0b0e17",
+                        "tertiary-fixed": "#7bd1fa",
+                        "outline": "#727581",
+                        "on-secondary-container": "#e1ffe9",
+                        "error": "#ff6e84",
+                        "error-container": "#a70138",
+                        "tertiary-fixed-dim": "#6cc3eb",
+                        "secondary": "#1dfba5",
+                        "on-primary-fixed": "#000000",
+                        "inverse-on-surface": "#525560",
+                        "on-secondary": "#005a38",
+                        "on-primary": "#0f00a4",
+                        "secondary-fixed": "#1dfba5",
+                        "primary-container": "#9396ff",
+                        "tertiary": "#9bddff",
+                        "primary-dim": "#6063ee",
+                        "tertiary-dim": "#6cc3eb",
+                        "on-tertiary-container": "#00465d",
+                        "surface-bright": "#272c3a",
+                        "primary-fixed": "#9396ff",
+                        "on-surface-variant": "#a8aab7",
+                        "primary": "#a3a6ff",
+                        "surface-dim": "#0b0e17",
+                        "secondary-fixed-dim": "#00ec9a",
+                        "on-tertiary-fixed": "#003041",
+                        "error-dim": "#d73357",
+                        "on-surface": "#e9eaf8",
+                        "primary-fixed-dim": "#8387ff",
+                        "secondary-container": "#006c44",
+                        "on-background": "#e9eaf8"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .conic-border {
+            position: relative;
+            background: #212533;
+            border-radius: 20px;
+            padding: 1px;
+        }
+        .conic-border::before {
+            content: "";
+            position: absolute;
+            inset: -1px;
+            background: conic-gradient(from 0deg, #6366F1, #00F5A0, #6366F1);
+            border-radius: 21px;
+            z-index: -1;
+            opacity: 0.6;
+        }
+        .glow-underline {
+            position: relative;
+        }
+        .glow-underline::after {
+            content: "";
+            position: absolute;
+            bottom: -8px;
+            left: 20%;
+            width: 60%;
+            height: 4px;
+            background: #6366F1;
+            box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.8);
+            border-radius: 2px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top Navigation -->
+<header class="fixed top-0 w-full z-50 bg-[#0b0e17]/80 backdrop-blur-3xl">
+<div class="flex justify-between items-center px-6 pt-12 pb-4 w-full">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+<span class="font-['Space_Grotesk'] tracking-tighter uppercase text-2xl font-bold bg-gradient-to-r from-[#6366F1] to-[#00F5A0] bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(99,102,241,0.5)]">SPLITSURE</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity cursor-pointer">settings</span>
+<div class="w-10 h-10 rounded-full border border-primary/20 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="close-up portrait of a professional male with a neutral expression against a dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGb-1xHalUfBKwfPlUnqwCSAdKTnbGh-CPEFErCyFLMZKxPRJi3NSiAGZSC2PEmhduJfTtQTCtdv_IKLbVZIvNXf4HxGHHPkmmh0bhOKcPu_6t73C_Q8-EZUIg7hC6ziapLXWtIqKU4M-_f6BXgWhAlr_5X5NuHcYTUBcaDv-TAOS-firc7cPTmSLPdJwTyxsAhSNyTUpsHk1xFGc64cn3J5pQjDzRThORm1-RiN9_DC7HuyzrfPqrG4BvLLSvX0HQlJ9Ev4Z9-dSr"/>
+</div>
+</div>
+</div>
+</header>
+<main class="pt-32 pb-40 px-6 max-w-4xl mx-auto space-y-12">
+<!-- Hero Amount -->
+<section class="flex flex-col items-center justify-center text-center space-y-2 py-8">
+<span class="font-label text-xs uppercase tracking-[0.3em] text-on-surface-variant">Transaction Value</span>
+<div class="relative">
+<h1 class="font-headline text-[72px] font-bold text-on-surface leading-none glow-underline tracking-tighter">
+                    $1,420.50
+                </h1>
+</div>
+</section>
+<!-- Details Card -->
+<div class="bg-surface-container-highest/80 backdrop-blur-3xl rounded-xl p-6 border border-white/5 space-y-8">
+<div class="relative pt-4">
+<label class="absolute -top-1 left-0 font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-primary">Floating Description</label>
+<input class="w-full bg-transparent border-b border-outline-variant/30 py-2 font-headline text-xl focus:border-primary outline-none transition-colors" type="text" value="GALAXY GATE DINNER &amp; STAY"/>
+</div>
+<div class="space-y-4">
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Expense Category</span>
+<div class="flex flex-wrap gap-3">
+<button class="px-5 py-2 rounded-full font-label text-xs uppercase tracking-wider bg-secondary/10 text-secondary border border-secondary/20 shadow-[0_0_15px_rgba(29,251,165,0.2)]">Food</button>
+<button class="px-5 py-2 rounded-full font-label text-xs uppercase tracking-wider bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 hover:border-primary/40 transition-all">Transport</button>
+<button class="px-5 py-2 rounded-full font-label text-xs uppercase tracking-wider bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 hover:border-primary/40 transition-all">Hotel</button>
+<button class="px-5 py-2 rounded-full font-label text-xs uppercase tracking-wider bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 hover:border-primary/40 transition-all">Entertainment</button>
+</div>
+</div>
+</div>
+<!-- Split Intelligence Section -->
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<span class="font-['JetBrains_Mono'] text-xs uppercase tracking-widest text-on-surface-variant">PAID BY</span>
+<div class="flex -space-x-3">
+<img class="w-8 h-8 rounded-full border-2 border-surface" data-alt="professional headshot of a young woman smiling warmly" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBV3F7vQ13PtD6d7ReHcO7M01P92zdRKQeqTTijQtVYwxLy1sBehgHO_6F8pUdl92ZZuuHuOWULKkFzb9Svh9w5QWffGM9Z05afhcxMPi4qMcam_gza7VjCGQZr5giMvSQNSgg7qYS-VoBgoM8pOJHbt7-M-fYcz1VMtnX8FWyn30LC7yvsiEiY7K-iEuRb6rOBtRMff6BthWEG3CULstllMcZdwuyM7bg4oKywXuRhVt1cVkod-daNY-_b7MwplSzBzYsCSfEJrLMO"/>
+<div class="w-8 h-8 rounded-full border-2 border-surface bg-primary flex items-center justify-center text-[10px] font-bold text-on-primary">JD</div>
+</div>
+</div>
+<!-- Glass Toggle -->
+<div class="flex bg-surface-container-low p-1 rounded-lg border border-outline-variant/10 backdrop-blur-xl">
+<button class="px-4 py-1.5 rounded-md font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest bg-primary text-on-primary-container shadow-lg">EQUAL</button>
+<button class="px-4 py-1.5 rounded-md font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors">EXACT</button>
+<button class="px-4 py-1.5 rounded-md font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors">PERCENT</button>
+</div>
+</div>
+<!-- Member Rows -->
+<div class="bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10">
+<table class="w-full text-left">
+<tbody class="divide-y divide-outline-variant/10">
+<tr class="group hover:bg-surface-container-high/50 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-secondary p-[1px]">
+<div class="w-full h-full rounded-full bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="modern avatar of a man wearing glasses" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBG6mtmKn_6ZmgOyG5eZIJAdpc7j3X8pkf5ai74LDfaKtAb9Awu5ENt1lgKfTagPoEtWbzP4qwq3YVkjug9hPkRvswNII4evUVfvKCl8N7phBCYl2MVz4Htsk04GHWQINsV9kXlECgazGwDaznq3hFf1Gv4_4veDShl3iLGtsDdoVm6lGF2dSdjxTczS9KCE61W3XI9vt8yu1BiY6tzdwNvb0Q1LMzZIRToxMoEfGzCoL3UCuziGlhFW42v9Ez_xRPI6T6goqbevxmV"/>
+</div>
+</div>
+<div>
+<div class="text-sm font-medium">Alex Rivera</div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Organiser</div>
+</div>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<span class="font-['JetBrains_Mono'] text-secondary font-bold">$355.12</span>
+</td>
+</tr>
+<tr class="group hover:bg-surface-container-high/50 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+<div>
+<div class="text-sm font-medium">Sarah Chen</div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Contributor</div>
+</div>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<span class="font-['JetBrains_Mono'] text-on-surface/80">$355.12</span>
+</td>
+</tr>
+<tr class="group hover:bg-surface-container-high/50 transition-colors">
+<td class="py-4 px-6">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface-variant text-[10px] font-bold">MK</div>
+<div>
+<div class="text-sm font-medium">Marcus Kim</div>
+<div class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Contributor</div>
+</div>
+</div>
+</td>
+<td class="py-4 px-6 text-right">
+<span class="font-['JetBrains_Mono'] text-on-surface/80">$355.12</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Proof Vault Card -->
+<div class="conic-border p-6 shadow-[0_20px_50px_rgba(0,0,0,0.4)]">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">lock</span>
+<h3 class="font-headline font-bold tracking-tight text-lg">🔐 PROOF VAULT</h3>
+</div>
+<span class="font-['JetBrains_Mono'] text-[10px] px-2 py-0.5 rounded border border-secondary/40 text-secondary uppercase tracking-[0.2em]">TAMPER-PROOF</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Upload Zone -->
+<div class="aspect-square rounded-xl border-2 border-dashed border-outline-variant/30 bg-surface/40 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-primary/50 transition-all group">
+<span class="material-symbols-outlined text-3xl text-on-surface-variant group-hover:text-primary transition-colors">photo_camera</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest text-on-surface-variant">Add Invoice Proof</span>
+</div>
+<!-- Thumbnails and Metadata -->
+<div class="space-y-4">
+<div class="flex gap-4 p-3 rounded-lg bg-surface-container-low border border-white/5">
+<div class="w-16 h-16 rounded bg-black/40 overflow-hidden shrink-0">
+<img class="w-full h-full object-cover opacity-60" data-alt="macro close-up of a detailed paper receipt with high-contrast text and shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgzbhvUvOUu6zZsJArjVNhx7ApeY-7RT_ijxKfL8XZLcQf_6HolMY3b4YjgUD27uAoaBL1nP75dWBjfIIEjrVW64oab3PyN49E6zcDhai5WigHP0U0-pMD4DvvHpjvHas_1qgJXcr2Z9UTgT8a50cz5TugAYhMx55K5ge6C-a5BznfdK_6joRT5akMmObuuYbs4aEVVmqlOwxMW0GCFwdiqjF-rtiar2hygKfFw-K7XAHET6TQSZOCIXZBx9H0ySySyEQl2MbDiuTH"/>
+</div>
+<div class="flex flex-col justify-center min-w-0">
+<div class="flex items-center gap-1.5 mb-1">
+<span class="material-symbols-outlined text-[14px] text-secondary">verified</span>
+<span class="font-['JetBrains_Mono'] text-[9px] uppercase tracking-widest text-on-surface-variant truncate">SHA-256: 8a4c...ef21</span>
+</div>
+<div class="font-['JetBrains_Mono'] text-[9px] text-on-surface-variant/60 uppercase tracking-widest">
+                                LOCK: 2024-05-20 14:32:01 UTC
+                            </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- CTA Action -->
+<button class="w-full group relative p-[1px] rounded-xl bg-gradient-to-r from-primary via-primary-dim to-secondary-dim overflow-hidden shadow-[0_0_30px_rgba(99,102,241,0.4)] active:scale-95 transition-all duration-300">
+<div class="relative bg-surface rounded-[11px] py-5 px-8 flex items-center justify-center gap-3 group-hover:bg-transparent transition-colors">
+<span class="material-symbols-outlined text-on-surface group-hover:text-surface transition-colors" style="font-variation-settings: 'FILL' 1;">key</span>
+<span class="font-headline font-bold uppercase tracking-[0.2em] text-on-surface group-hover:text-surface transition-colors">LOCK EXPENSE TO LEDGER</span>
+</div>
+</button>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-8 left-1/2 -translate-x-1/2 flex justify-around items-center py-4 px-2 z-50 w-[90%] max-w-md bg-[#212533]/80 backdrop-blur-3xl rounded-[32px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest mt-1">Groups</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#1dfba5] drop-shadow-[0_0_8px_rgba(29,251,165,0.6)] active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest mt-1">Activity</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all active:scale-90 duration-300 ease-out" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest mt-1">Profile</span>
+</a>
+</nav>
+</body></html>
