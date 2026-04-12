@@ -5,6 +5,8 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
+    "android:apk:debug": "android\\gradlew.bat -p android assembleDebug copyDebugApkToDist",
+    "android:apk:release": "android\\gradlew.bat -p android assembleRelease copyReleaseApkToDist",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },
@@ -18,10 +20,12 @@
     "axios": "^1.7.7",
     "date-fns": "^3.6.0",
     "expo": "~51.0.0",
+    "expo-blur": "~13.0.3",
     "expo-constants": "~16.0.2",
     "expo-document-picker": "~12.0.2",
     "expo-font": "~12.0.10",
     "expo-image-picker": "~15.1.0",
+    "expo-linear-gradient": "~13.0.2",
     "expo-linking": "~6.3.1",
     "expo-modules-autolinking": "1.11.3",
     "expo-notifications": "~0.28.15",

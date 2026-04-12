@@ -1,167 +1,185 @@
 import React from 'react';
 import {
-  TouchableOpacity, Text, View, TextInput, ActivityIndicator,
-  StyleSheet, TextInputProps, ViewStyle, TextStyle, Image,
+  ActivityIndicator,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TextInput,
+  TextInputProps,
+  TouchableOpacity,
+  View,
+  ViewStyle,
 } from 'react-native';
-import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Colors, Radius, Shadow, Spacing, Typography } from '../utils/theme';
 
-// ── Button ────────────────────────────────────────────────────────────────────
 interface ButtonProps {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
-  size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   disabled?: boolean;
-  icon?: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  variant?: 'primary' | 'ghost' | 'danger' | 'secondary';
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export function Button({
-  title, onPress, variant = 'primary', size = 'md',
-  loading, disabled, icon, style,
+  title,
+  onPress,
+  loading,
+  disabled,
+  style,
+  variant = 'primary',
+  size = 'md',
 }: ButtonProps) {
-  const bg = {
-    primary: Colors.primary,
-    secondary: Colors.primaryLight,
-    danger: Colors.danger,
-    ghost: 'transparent',
-  }[variant];
+  const minHeight = size === 'sm' ? 44 : size === 'lg' ? 60 : 56;
+  const content = (
+    <>
+      {loading ? (
+        <ActivityIndicator color={variant === 'primary' ? Colors.textInverse : Colors.textPrimary} />
+      ) : (
+        <Text style={[styles.buttonText, variant !== 'primary' && styles.buttonTextMuted, size === 'sm' && { fontSize: Typography.sm }]}>
+          {title}
+        </Text>
+      )}
+    </>
+  );
 
-  const textColor = {
-    primary: Colors.textInverse,
-    secondary: Colors.primary,
-    danger: Colors.textInverse,
-    ghost: Colors.primary,
-  }[variant];
-
-  const pad = { sm: Spacing.sm, md: Spacing.md, lg: Spacing.base }[size];
-  const fontSize = { sm: Typography.sm, md: Typography.base, lg: Typography.md }[size];
+  if (variant === 'primary') {
+    return (
+      <Pressable onPress={onPress} disabled={disabled || loading} style={({ pressed }) => [style, pressed && styles.pressed]}>
+        <LinearGradient
+          colors={[Colors.primaryDim, Colors.primary, Colors.secondaryDim]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.button, styles.primaryButton, { minHeight }, disabled && styles.disabled]}
+        >
+          {content}
+        </LinearGradient>
+      </Pressable>
+    );
+  }
 
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled || loading}
-      activeOpacity={0.8}
+      activeOpacity={0.85}
       style={[
-        styles.btn,
-        { backgroundColor: bg, paddingVertical: pad, paddingHorizontal: pad * 2, borderRadius: Radius.md },
-        (disabled || loading) && styles.btnDisabled,
-        variant === 'ghost' && styles.btnGhost,
-        variant === 'secondary' && { borderWidth: 1.5, borderColor: Colors.primary },
+        styles.button,
+        { minHeight },
+        styles.secondaryButton,
+        variant === 'danger' && styles.dangerButton,
         style,
+        disabled && styles.disabled,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={textColor} />
-      ) : (
-        <View style={styles.btnInner}>
-          {icon && <View style={{ marginRight: 6 }}>{icon}</View>}
-          <Text style={[styles.btnText, { color: textColor, fontSize }]}>{title}</Text>
-        </View>
-      )}
+      {content}
     </TouchableOpacity>
   );
 }
 
-// ── Card ──────────────────────────────────────────────────────────────────────
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   onPress?: () => void;
-  shadow?: boolean;
 }
 
-export function Card({ children, style, onPress, shadow = true }: CardProps) {
-  const cardStyle = [styles.card, shadow && Shadow.sm, style];
+export function Card({ children, style, onPress }: CardProps) {
+  const body = (
+    <BlurView intensity={28} tint="dark" style={[styles.card, style]}>
+      {children}
+    </BlurView>
+  );
+
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={cardStyle}>
-        {children}
-      </TouchableOpacity>
+      <Pressable onPress={onPress} style={({ pressed }) => [pressed && styles.pressed]}>
+        {body}
+      </Pressable>
     );
   }
-  return <View style={cardStyle}>{children}</View>;
+
+  return body;
 }
 
-// ── Input ─────────────────────────────────────────────────────────────────────
 interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
-  containerStyle?: ViewStyle;
+  containerStyle?: StyleProp<ViewStyle>;
+  leftAddon?: React.ReactNode;
+  rightAddon?: React.ReactNode;
 }
 
-export function Input({ label, error, leftIcon, rightIcon, containerStyle, style, ...props }: InputProps) {
+export function Input({
+  label,
+  error,
+  containerStyle,
+  leftAddon,
+  rightAddon,
+  style,
+  ...props
+}: InputProps) {
   return (
-    <View style={[{ marginBottom: Spacing.md }, containerStyle]}>
-      {label && <Text style={styles.inputLabel}>{label}</Text>}
-      <View style={[styles.inputWrapper, error && styles.inputError]}>
-        {leftIcon && <View style={styles.inputIcon}>{leftIcon}</View>}
+    <View style={[styles.inputContainer, containerStyle]}>
+      {label ? <Text style={styles.inputLabel}>{label}</Text> : null}
+      <View style={[styles.inputShell, !!error && styles.inputShellError]}>
+        {leftAddon ? <View style={styles.inputAddon}>{leftAddon}</View> : null}
         <TextInput
-          style={[styles.input, leftIcon && { paddingLeft: 0 }, style]}
-          placeholderTextColor={Colors.textTertiary}
+          placeholderTextColor={Colors.textMuted}
+          style={[styles.input, style]}
           {...props}
         />
-        {rightIcon && <View style={styles.inputIconRight}>{rightIcon}</View>}
+        {rightAddon ? <View style={styles.inputAddon}>{rightAddon}</View> : null}
       </View>
-      {error && <Text style={styles.inputErrorText}>{error}</Text>}
+      {error ? <Text style={styles.inputError}>{error}</Text> : null}
     </View>
   );
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
 interface AvatarProps {
   name?: string | null;
-  uri?: string | null;
   size?: number;
-  style?: ViewStyle;
 }
 
-export function Avatar({ name, uri, size = 40, style }: AvatarProps) {
-  const initials = name
-    ? name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
-    : '?';
-
-  const bgColor = stringToColor(name || '?');
-
-  if (uri) {
-    return (
-      <Image
-        source={{ uri }}
-        style={[{ width: size, height: size, borderRadius: size / 2 }, style]}
-      />
-    );
-  }
+export function Avatar({ name, size = 40 }: AvatarProps) {
+  const initials = (name || '?')
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
-    <View style={[
-      styles.avatar,
-      { width: size, height: size, borderRadius: size / 2, backgroundColor: bgColor },
-      style,
-    ]}>
-      <Text style={[styles.avatarText, { fontSize: size * 0.38 }]}>{initials}</Text>
-    </View>
+    <LinearGradient
+      colors={[Colors.primaryDim, Colors.primary, Colors.secondary]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[
+        styles.avatar,
+        { width: size, height: size, borderRadius: size / 2 },
+      ]}
+    >
+      <View style={[styles.avatarInner, { borderRadius: size / 2 - 1 }]}>
+        <Text style={[styles.avatarText, { fontSize: Math.max(10, size * 0.28) }]}>{initials}</Text>
+      </View>
+    </LinearGradient>
   );
 }
 
-function stringToColor(str: string): string {
-  const palette = ['#6C63FF', '#FF6B6B', '#00C897', '#FFD93D', '#4ECDC4', '#FF8C00', '#9B59B6'];
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  return palette[Math.abs(hash) % palette.length];
-}
-
-// ── Badge ─────────────────────────────────────────────────────────────────────
-interface BadgeProps {
+export function Badge({
+  label,
+  color = Colors.secondary,
+  bgColor = 'rgba(29,251,165,0.1)',
+  style,
+}: {
   label: string;
   color?: string;
   bgColor?: string;
   style?: ViewStyle;
-}
-
-export function Badge({ label, color = Colors.primary, bgColor = Colors.primaryLight, style }: BadgeProps) {
+}) {
   return (
     <View style={[styles.badge, { backgroundColor: bgColor }, style]}>
       <Text style={[styles.badgeText, { color }]}>{label}</Text>
@@ -169,77 +187,158 @@ export function Badge({ label, color = Colors.primary, bgColor = Colors.primaryL
   );
 }
 
-// ── Divider ───────────────────────────────────────────────────────────────────
 export function Divider({ style }: { style?: ViewStyle }) {
   return <View style={[styles.divider, style]} />;
 }
 
-// ── EmptyState ────────────────────────────────────────────────────────────────
-export function EmptyState({ icon, title, subtitle }: { icon: string; title: string; subtitle?: string }) {
+export function EmptyState({
+  icon,
+  title,
+  subtitle,
+}: {
+  icon: string;
+  title: string;
+  subtitle?: string;
+}) {
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyIcon}>{icon}</Text>
       <Text style={styles.emptyTitle}>{title}</Text>
-      {subtitle && <Text style={styles.emptySub}>{subtitle}</Text>}
+      {subtitle ? <Text style={styles.emptySub}>{subtitle}</Text> : null}
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  btn: { alignItems: 'center', justifyContent: 'center' },
-  btnInner: { flexDirection: 'row', alignItems: 'center' },
-  btnText: { fontWeight: '700', letterSpacing: 0.3 },
-  btnDisabled: { opacity: 0.5 },
-  btnGhost: {},
-
-  card: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    padding: Spacing.base,
-    marginBottom: Spacing.sm,
-  },
-
-  inputLabel: {
-    fontSize: Typography.sm,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: Spacing.xs,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
+  button: {
+    minHeight: 56,
     borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.lg,
   },
-  inputError: { borderColor: Colors.danger },
-  input: {
-    flex: 1,
-    height: 50,
+  primaryButton: {
+    ...Shadow.glowMd,
+  },
+  secondaryButton: {
+    backgroundColor: Colors.chip,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+  },
+  dangerButton: {
+    backgroundColor: 'rgba(255,110,132,0.12)',
+    borderColor: 'rgba(255,110,132,0.24)',
+  },
+  buttonText: {
+    color: Colors.textInverse,
     fontSize: Typography.base,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  buttonTextMuted: {
     color: Colors.textPrimary,
   },
-  inputIcon: { marginRight: Spacing.sm },
-  inputIconRight: { marginLeft: Spacing.sm },
-  inputErrorText: { fontSize: Typography.xs, color: Colors.danger, marginTop: 4 },
-
-  avatar: { alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: Colors.textInverse, fontWeight: '700' },
-
-  badge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
+  disabled: {
+    opacity: 0.5,
   },
-  badgeText: { fontSize: Typography.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  divider: { height: 1, backgroundColor: Colors.border, marginVertical: Spacing.sm },
-
-  empty: { alignItems: 'center', paddingVertical: Spacing.xxxl },
-  emptyIcon: { fontSize: 52, marginBottom: Spacing.md },
-  emptyTitle: { fontSize: Typography.lg, fontWeight: '700', color: Colors.textPrimary, textAlign: 'center' },
-  emptySub: { fontSize: Typography.sm, color: Colors.textTertiary, textAlign: 'center', marginTop: Spacing.xs, paddingHorizontal: Spacing.xl },
+  pressed: {
+    transform: [{ scale: 0.985 }],
+  },
+  card: {
+    backgroundColor: Colors.glass,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+    overflow: 'hidden',
+    padding: Spacing.lg,
+  },
+  inputContainer: {
+    marginBottom: Spacing.md,
+  },
+  inputLabel: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs,
+    fontWeight: '700',
+    letterSpacing: 2,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  inputShell: {
+    minHeight: 56,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surfaceLowest,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+    paddingHorizontal: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  inputShellError: {
+    borderColor: Colors.danger,
+  },
+  input: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: Typography.md,
+    minHeight: 54,
+  },
+  inputAddon: {
+    marginHorizontal: 4,
+  },
+  inputError: {
+    color: Colors.danger,
+    marginTop: 6,
+    fontSize: Typography.sm,
+  },
+  avatar: {
+    padding: 1,
+  },
+  avatarInner: {
+    flex: 1,
+    backgroundColor: Colors.surfaceHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: Colors.textPrimary,
+    fontWeight: '800',
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  empty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.xxxl,
+    paddingHorizontal: Spacing.lg,
+  },
+  emptyIcon: {
+    fontSize: 36,
+    marginBottom: Spacing.md,
+  },
+  emptyTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.lg,
+    fontWeight: '800',
+  },
+  emptySub: {
+    marginTop: 8,
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    textAlign: 'center',
+  },
 });
