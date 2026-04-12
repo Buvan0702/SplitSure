@@ -44,6 +44,11 @@ async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
     db.add(record)
     await db.commit()
 
+    if not settings.USE_DEV_OTP:
+        return {
+            "message": "OTP generated",
+        }
+
     return {
         "message": "OTP generated (dev mode — no SMS sent)",
         "dev_otp": otp,

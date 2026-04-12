@@ -31,6 +31,13 @@ async def _require_membership(db: AsyncSession, group_id: int, user_id: int):
     return member
 
 
+async def _get_group_member_ids(db: AsyncSession, group_id: int) -> set[int]:
+    result = await db.execute(
+        select(GroupMember.user_id).where(GroupMember.group_id == group_id)
+    )
+    return set(result.scalars().all())
+
+
 async def _load_expense(db: AsyncSession, expense_id: int, group_id: int) -> Expense:
     result = await db.execute(
         select(Expense)
@@ -79,6 +86,16 @@ async def create_expense(
     db: AsyncSession = Depends(get_db),
 ):
     await _require_membership(db, group_id, current_user.id)
+    member_ids = await _get_group_member_ids(db, group_id)
+
+    split_user_ids = [s.user_id for s in body.splits]
+    if not split_user_ids:
+        raise HTTPException(400, "At least one split is required")
+    if len(split_user_ids) != len(set(split_user_ids)):
+        raise HTTPException(400, "Duplicate users in split are not allowed")
+    invalid_user_ids = [user_id for user_id in split_user_ids if user_id not in member_ids]
+    if invalid_user_ids:
+        raise HTTPException(400, "All split users must be members of the group")
 
     expense = Expense(
         group_id=group_id,
@@ -92,12 +109,22 @@ async def create_expense(
     await db.flush()
 
     # Build splits
-    for s in body.splits:
+    remainder = body.amount
+    share_count = len(body.splits)
+    extra_shares = body.amount % share_count if body.split_type == SplitType.EQUAL else 0
+    for index, s in enumerate(body.splits):
         amount = s.amount
         if body.split_type == SplitType.EQUAL:
-            amount = body.amount // len(body.splits)
+            amount = body.amount // share_count
+            if index < extra_shares:
+                amount += 1
         elif body.split_type == SplitType.PERCENTAGE:
-            amount = int(body.amount * (s.percentage / 100))
+            amount = round(body.amount * (float(s.percentage or 0) / 100))
+
+        if amount is None or amount <= 0:
+            raise HTTPException(400, "Split amount must be a positive value")
+
+        remainder -= amount
 
         split = Split(
             expense_id=expense.id,
@@ -108,6 +135,9 @@ async def create_expense(
         )
         db.add(split)
 
+    if remainder != 0:
+        raise HTTPException(400, "Split amounts must add up to the expense total")
+
     await log_event(
         db, group_id, AuditEventType.EXPENSE_CREATED, current_user.id,
         entity_id=expense.id,
@@ -115,7 +145,7 @@ async def create_expense(
     )
 
     await db.commit()
-    return await _load_expense(db, expense.id, group_id)
+    return _build_expense_out(await _load_expense(db, expense.id, group_id))
 
 
 @router.get("", response_model=list[ExpenseOut])
@@ -146,7 +176,7 @@ async def list_expenses(
         query = query.where(Expense.description.ilike(f"%{search}%"))
 
     result = await db.execute(query)
-    return result.scalars().all()
+    return [_build_expense_out(expense) for expense in result.scalars().all()]
 
 
 @router.get("/{expense_id}", response_model=ExpenseOut)
@@ -157,7 +187,7 @@ async def get_expense(
     db: AsyncSession = Depends(get_db),
 ):
     await _require_membership(db, group_id, current_user.id)
-    return await _load_expense(db, expense_id, group_id)
+    return _build_expense_out(await _load_expense(db, expense_id, group_id))
 
 
 @router.patch("/{expense_id}", response_model=ExpenseOut)
@@ -192,7 +222,7 @@ async def update_expense(
     )
 
     await db.commit()
-    return await _load_expense(db, expense_id, group_id)
+    return _build_expense_out(await _load_expense(db, expense_id, group_id))
 
 
 @router.delete("/{expense_id}", status_code=204)
@@ -240,13 +270,13 @@ async def dispute_expense(
     expense.dispute_raised_by = current_user.id
 
     await log_event(
-        db, group_id, AuditEventType.SETTLEMENT_DISPUTED, current_user.id,
+        db, group_id, AuditEventType.EXPENSE_EDITED, current_user.id,
         entity_id=expense_id,
         metadata_json={"dispute_note": body.note},
     )
 
     await db.commit()
-    return await _load_expense(db, expense_id, group_id)
+    return _build_expense_out(await _load_expense(db, expense_id, group_id))
 
 
 @router.post("/{expense_id}/resolve-dispute", response_model=ExpenseOut)
@@ -268,6 +298,8 @@ async def resolve_dispute(
 
     expense = await _load_expense(db, expense_id, group_id)
     expense.is_disputed = False
+    expense.dispute_note = None
+    expense.dispute_raised_by = None
 
     await log_event(
         db, group_id, AuditEventType.DISPUTE_RESOLVED, current_user.id,
@@ -275,7 +307,7 @@ async def resolve_dispute(
     )
 
     await db.commit()
-    return await _load_expense(db, expense_id, group_id)
+    return _build_expense_out(await _load_expense(db, expense_id, group_id))
 
 
 @router.post("/{expense_id}/attachments", response_model=ProofAttachmentOut, status_code=201)

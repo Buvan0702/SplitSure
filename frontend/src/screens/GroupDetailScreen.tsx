@@ -1,121 +1,40 @@
-import React, { useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, RefreshControl,
-  TouchableOpacity, ScrollView, Alert, Share, Modal,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
-} from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { groupsAPI, expensesAPI, reportsAPI } from '../services/api';
-import { Group, Expense, CATEGORY_ICONS, CATEGORY_COLORS, GroupMember } from '../types';
-import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
-import { Button, Card, Avatar, Badge, EmptyState, Input, Divider } from '../components/ui';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MaterialIcons } from '@expo/vector-icons';
+import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
+import { Avatar, Badge, Button, Card, Input } from '../components/ui';
+import { auditAPI, expensesAPI, groupsAPI, settlementsAPI } from '../services/api';
+import { AuditLog, Expense, Group, GroupBalances } from '../types';
+import { Colors, Radius, Shadow, Spacing, Typography } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
-import { format, formatDistanceToNow } from 'date-fns';
 
-type Tab = 'expenses' | 'members' | 'balances' | 'audit';
+type GroupTab = 'expenses' | 'balances' | 'audit';
 
-// ── Expense Row ───────────────────────────────────────────────────────────────
-function ExpenseRow({ expense, onPress }: { expense: Expense; onPress: () => void }) {
-  const amountRs = (expense.amount / 100).toFixed(2);
-  const catColor = CATEGORY_COLORS[expense.category];
+const categoryStyles: Record<string, { bg: string; text: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
+  food: { bg: 'rgba(251,146,60,0.15)', text: '#FB923C', icon: 'restaurant' },
+  transport: { bg: 'rgba(96,165,250,0.15)', text: '#60A5FA', icon: 'local-taxi' },
+  accommodation: { bg: 'rgba(168,85,247,0.15)', text: '#A855F7', icon: 'hotel' },
+  utilities: { bg: 'rgba(250,204,21,0.15)', text: '#FACC15', icon: 'flash-on' },
+  misc: { bg: 'rgba(163,166,255,0.15)', text: Colors.primary, icon: 'receipt-long' },
+};
 
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[styles.expRow, Shadow.sm]}>
-      <View style={[styles.expCatDot, { backgroundColor: catColor + '25' }]}>
-        <Text style={styles.expCatIcon}>{CATEGORY_ICONS[expense.category]}</Text>
-      </View>
-      <View style={styles.expInfo}>
-        <View style={styles.expTopRow}>
-          <Text style={styles.expDesc} numberOfLines={1}>{expense.description}</Text>
-          <Text style={styles.expAmount}>₹{amountRs}</Text>
-        </View>
-        <View style={styles.expBottomRow}>
-          <Text style={styles.expMeta}>
-            Paid by <Text style={{ fontWeight: '700' }}>{expense.paid_by_user.name || expense.paid_by_user.phone}</Text>
-          </Text>
-          <Text style={styles.expTime}>{formatDistanceToNow(new Date(expense.created_at), { addSuffix: true })}</Text>
-        </View>
-        <View style={styles.expFlags}>
-          {expense.proof_attachments.length > 0 && (
-            <View style={styles.expFlag}>
-              <Text style={styles.expFlagText}>📎 {expense.proof_attachments.length} proof</Text>
-            </View>
-          )}
-          {expense.is_disputed && (
-            <View style={[styles.expFlag, { backgroundColor: Colors.dangerLight }]}>
-              <Text style={[styles.expFlagText, { color: Colors.danger }]}>⚠️ Disputed</Text>
-            </View>
-          )}
-          {expense.is_settled && (
-            <View style={[styles.expFlag, { backgroundColor: Colors.successLight }]}>
-              <Text style={[styles.expFlagText, { color: Colors.success }]}>✅ Settled</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ── Member Row ────────────────────────────────────────────────────────────────
-function MemberRow({
-  member, isAdmin, currentUserId, groupId, onRemove,
-}: {
-  member: GroupMember;
-  isAdmin: boolean;
-  currentUserId: number;
-  groupId: number;
-  onRemove: (userId: number, name: string) => void;
-}) {
-  const isMe = member.user.id === currentUserId;
-  return (
-    <View style={styles.memberRow}>
-      <Avatar name={member.user.name || member.user.phone} size={44} />
-      <View style={styles.memberInfo}>
-        <Text style={styles.memberName}>
-          {member.user.name || member.user.phone}{isMe ? ' (You)' : ''}
-        </Text>
-        <Text style={styles.memberPhone}>{member.user.phone}</Text>
-        {member.user.upi_id && (
-          <Text style={styles.memberUpi}>💳 {member.user.upi_id}</Text>
-        )}
-      </View>
-      <View style={styles.memberRight}>
-        <Badge
-          label={member.role === 'admin' ? 'Admin' : 'Member'}
-          color={member.role === 'admin' ? Colors.primary : Colors.textTertiary}
-          bgColor={member.role === 'admin' ? Colors.primaryLight : Colors.surfaceAlt}
-        />
-        {isAdmin && !isMe && (
-          <TouchableOpacity
-            onPress={() => onRemove(member.user.id, member.user.name || member.user.phone)}
-            style={styles.removeBtn}
-          >
-            <Text style={styles.removeBtnText}>✕</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    </View>
-  );
-}
-
-// ── Main Screen ───────────────────────────────────────────────────────────────
 export default function GroupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-
-  const [activeTab, setActiveTab] = useState<Tab>('expenses');
+  const [tab, setTab] = useState<GroupTab>('expenses');
   const [showAddMember, setShowAddMember] = useState(false);
-  const [newPhone, setNewPhone] = useState('');
-  const [phoneError, setPhoneError] = useState('');
-  const [search, setSearch] = useState('');
-  const [reportLoading, setReportLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [memberPhone, setMemberPhone] = useState('');
+  const [memberError, setMemberError] = useState('');
+  const [groupName, setGroupName] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
+  const [groupError, setGroupError] = useState('');
 
-  // ── Queries ──────────────────────────────────────────────────────────────
-  const { data: group, isLoading: groupLoading, refetch: refetchGroup } = useQuery({
+  const groupQuery = useQuery({
     queryKey: ['group', id],
     queryFn: async () => {
       const { data } = await groupsAPI.get(Number(id));
@@ -123,447 +42,548 @@ export default function GroupDetailScreen() {
     },
   });
 
-  const { data: expenses, isLoading: expLoading, refetch: refetchExp } = useQuery({
+  const expensesQuery = useQuery({
     queryKey: ['expenses', id],
     queryFn: async () => {
       const { data } = await expensesAPI.list(Number(id));
       return data as Expense[];
     },
-    enabled: activeTab === 'expenses',
   });
 
-  const isAdmin = group?.members.find(m => m.user.id === user?.id)?.role === 'admin';
+  const balancesQuery = useQuery({
+    queryKey: ['balances', id],
+    queryFn: async () => {
+      const { data } = await settlementsAPI.getBalances(Number(id));
+      return data as GroupBalances;
+    },
+  });
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
-  const addMemberMutation = useMutation({
-    mutationFn: () => groupsAPI.addMember(Number(id), newPhone.startsWith('+') ? newPhone : `+91${newPhone.replace(/\D/g,'')}`),
+  const auditQuery = useQuery({
+    queryKey: ['audit', id],
+    queryFn: async () => {
+      const { data } = await auditAPI.list(Number(id), { limit: 5, offset: 0 });
+      return data as AuditLog[];
+    },
+  });
+
+  const isAdmin = (groupQuery.data?.members || []).some((member) => member.user.id === user?.id && member.role === 'admin');
+
+  const addMember = useMutation({
+    mutationFn: () => groupsAPI.addMember(Number(id), memberPhone),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['group', id] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
       setShowAddMember(false);
-      setNewPhone('');
+      setMemberPhone('');
+      setMemberError('');
     },
-    onError: (e: any) => setPhoneError(e?.response?.data?.detail || 'User not found'),
+    onError: (error: any) => {
+      setMemberError(error?.response?.data?.detail || 'Failed to add member');
+    },
   });
 
-  const removeMemberMutation = useMutation({
+  const updateGroup = useMutation({
+    mutationFn: () => groupsAPI.update(Number(id), { name: groupName.trim(), description: groupDescription.trim() || undefined }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group', id] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      setShowSettings(false);
+      setGroupError('');
+    },
+    onError: (error: any) => {
+      setGroupError(error?.response?.data?.detail || 'Failed to update group');
+    },
+  });
+
+  const removeMember = useMutation({
     mutationFn: (userId: number) => groupsAPI.removeMember(Number(id), userId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['group', id] }),
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to remove member'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['group', id] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+    },
+    onError: (error: any) => {
+      Alert.alert('Unable to remove member', error?.response?.data?.detail || 'Failed to remove member');
+    },
   });
 
-  const handleRemoveMember = (userId: number, name: string) => {
-    Alert.alert('Remove Member', `Remove ${name} from this group?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeMemberMutation.mutate(userId) },
-    ]);
+  const archiveGroup = useMutation({
+    mutationFn: () => groupsAPI.archive(Number(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      router.replace('/(tabs)/groups');
+    },
+    onError: (error: any) => {
+      Alert.alert('Unable to archive group', error?.response?.data?.detail || 'Failed to archive group');
+    },
+  });
+
+  const createInvite = useMutation({
+    mutationFn: () => groupsAPI.createInvite(Number(id)),
+    onSuccess: async ({ data }) => {
+      const message = `Join my SplitSure group using this invite token:\n\n${data.token}\n\nIt expires on ${new Date(data.expires_at).toLocaleString()}.`;
+      try {
+        await Share.share({ message });
+      } catch {
+        Alert.alert('Invite ready', message);
+      }
+    },
+    onError: (error: any) => {
+      Alert.alert('Unable to create invite', error?.response?.data?.detail || 'Failed to create invite');
+    },
+  });
+
+  const memberBalances = useMemo(() => {
+    const lookup = new Map((balancesQuery.data?.balances || []).map((item) => [item.user.id, item.net_balance]));
+    return (groupQuery.data?.members || []).map((member) => ({
+      member,
+      net: lookup.get(member.user.id) || 0,
+    }));
+  }, [balancesQuery.data, groupQuery.data]);
+
+  const openSettings = () => {
+    setGroupName(groupQuery.data?.name || '');
+    setGroupDescription(groupQuery.data?.description || '');
+    setGroupError('');
+    setShowSettings(true);
   };
 
-  const handleShareInvite = async () => {
-    try {
-      const { data } = await groupsAPI.createInvite(Number(id));
-      await Share.share({
-        message: `Join "${group?.name}" on SplitSure! Use this link to join:\nsplitsure://join/${data.token}\n\nValid for 72 hours.`,
-      });
-    } catch (e) {
-      Alert.alert('Error', 'Failed to generate invite link');
-    }
-  };
-
-  const handleGenerateReport = async () => {
-    if (!user?.is_paid_tier) {
-      Alert.alert('Pro Feature', 'PDF reports are available on the Pro tier. Upgrade to unlock this feature!', [
-        { text: 'Maybe Later', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/profile') },
-      ]);
-      return;
-    }
-    setReportLoading(true);
-    try {
-      await reportsAPI.generate(Number(id));
-      Alert.alert('✅ Report Ready', 'Your PDF report has been generated and downloaded.');
-    } catch (e) {
-      Alert.alert('Error', 'Failed to generate report');
-    } finally {
-      setReportLoading(false);
-    }
-  };
-
-  const filteredExpenses = expenses?.filter(e =>
-    !search || e.description.toLowerCase().includes(search.toLowerCase())
-  ) ?? [];
-
-  const totalExpenses = expenses?.reduce((s, e) => s + e.amount, 0) ?? 0;
-  const disputedCount = expenses?.filter(e => e.is_disputed).length ?? 0;
-
-  if (groupLoading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+  const title = (
+    <View>
+      <Text style={styles.groupHeading}>{groupQuery.data?.name || 'GROUP'}</Text>
+      <View style={{ marginTop: 4 }}>
+        <Badge label={isAdmin ? 'Admin Mode Active' : 'Audit Shield Active'} />
       </View>
-    );
-  }
+    </View>
+  );
 
   return (
-    <View style={styles.container}>
-      {/* Group Header */}
-      <View style={[styles.groupHeader, Shadow.sm]}>
-        <View style={styles.groupHeaderTop}>
-          <View style={styles.groupIconWrap}>
-            <Text style={styles.groupIconText}>{group?.name.charAt(0).toUpperCase()}</Text>
-          </View>
-          <View style={styles.groupHeaderInfo}>
-            <Text style={styles.groupName} numberOfLines={1}>{group?.name}</Text>
-            {group?.description && (
-              <Text style={styles.groupDesc} numberOfLines={1}>{group.description}</Text>
-            )}
-            <Text style={styles.groupMeta}>{group?.members.length} members</Text>
-          </View>
-          {isAdmin && (
-            <TouchableOpacity onPress={handleGenerateReport} style={styles.pdfBtn}>
-              {reportLoading
-                ? <ActivityIndicator size="small" color={Colors.primary} />
-                : <Text style={styles.pdfBtnText}>📄 PDF</Text>
-              }
-            </TouchableOpacity>
+    <AppBackdrop>
+      <TopBar title={title} userName={user?.name || user?.phone} />
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
+          {memberBalances.length ? memberBalances.map(({ member, net }) => {
+            const positive = net >= 0;
+            const isCurrentUser = member.user.id === user?.id;
+
+            return (
+              <Card key={member.id} style={[styles.memberCard, isCurrentUser && styles.memberCardActive]}>
+                {isAdmin && !isCurrentUser ? (
+                  <Pressable
+                    onPress={() => Alert.alert('Remove member', `Remove ${member.user.name || member.user.phone} from this group?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Remove', style: 'destructive', onPress: () => removeMember.mutate(member.user.id) },
+                    ])}
+                    style={styles.memberRemove}
+                  >
+                    <MaterialIcons color={Colors.textPrimary} name="close" size={14} />
+                  </Pressable>
+                ) : null}
+                <Avatar name={member.user.name || member.user.phone} size={40} />
+                <Text style={[styles.memberName, isCurrentUser && { color: Colors.primary }]}>
+                  {isCurrentUser ? 'YOU' : (member.user.name || member.user.phone).split(' ')[0].toUpperCase()}
+                </Text>
+                <Text style={[styles.memberRole, member.role === 'admin' && { color: Colors.primary }]}>
+                  {member.role.toUpperCase()}
+                </Text>
+                <Text style={[styles.memberNet, { color: positive ? Colors.secondary : Colors.danger }]}>
+                  {positive ? '+' : '-'}{Math.abs(net / 100).toFixed(0)}
+                </Text>
+              </Card>
+            );
+          }) : (
+            <ActivityIndicator color={Colors.primary} />
           )}
-        </View>
-
-        {/* Quick stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>₹{(totalExpenses / 100).toFixed(0)}</Text>
-            <Text style={styles.statLabel}>Total</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>{expenses?.length ?? 0}</Text>
-            <Text style={styles.statLabel}>Expenses</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statVal, disputedCount > 0 && { color: Colors.danger }]}>
-              {disputedCount}
-            </Text>
-            <Text style={styles.statLabel}>Disputed</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Tab bar */}
-      <View style={styles.tabBar}>
-        {([
-          { key: 'expenses', label: '💰 Expenses' },
-          { key: 'members',  label: '👥 Members' },
-          { key: 'balances', label: '⚖️ Balances' },
-          { key: 'audit',    label: '🔒 Audit' },
-        ] as { key: Tab; label: string }[]).map(tab => (
-          <TouchableOpacity
-            key={tab.key}
-            onPress={() => setActiveTab(tab.key)}
-            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
-          >
-            <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* ── Expenses Tab ───────────────────────────────────────────────── */}
-      {activeTab === 'expenses' && (
-        <View style={{ flex: 1 }}>
-          <View style={styles.searchRow}>
-            <Input
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search expenses..."
-              containerStyle={{ flex: 1, marginBottom: 0, marginRight: Spacing.sm }}
-              leftIcon={<Text>🔍</Text>}
-            />
-            <Button
-              title="+ Add"
-              onPress={() => router.push(`/add-expense?groupId=${id}`)}
-              size="sm"
-            />
-          </View>
-
-          <FlatList
-            data={filteredExpenses}
-            keyExtractor={e => String(e.id)}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <ExpenseRow
-                expense={item}
-                onPress={() => router.push(`/expense/${item.id}?groupId=${id}`)}
-              />
-            )}
-            ListEmptyComponent={
-              expLoading ? (
-                <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
-              ) : (
-                <EmptyState
-                  icon="💸"
-                  title="No expenses yet"
-                  subtitle="Add the first expense for this group"
-                />
-              )
-            }
-            refreshControl={
-              <RefreshControl refreshing={expLoading} onRefresh={refetchExp} tintColor={Colors.primary} />
-            }
-          />
-        </View>
-      )}
-
-      {/* ── Members Tab ────────────────────────────────────────────────── */}
-      {activeTab === 'members' && (
-        <ScrollView contentContainerStyle={styles.listContent}>
-          <View style={styles.memberActions}>
-            {isAdmin && (
-              <>
-                <Button
-                  title="+ Add Member"
-                  onPress={() => setShowAddMember(true)}
-                  size="sm"
-                  style={{ flex: 1, marginRight: Spacing.sm }}
-                />
-                <Button
-                  title="🔗 Invite Link"
-                  onPress={handleShareInvite}
-                  variant="secondary"
-                  size="sm"
-                  style={{ flex: 1 }}
-                />
-              </>
-            )}
-          </View>
-
-          {group?.members.map(m => (
-            <MemberRow
-              key={m.id}
-              member={m}
-              isAdmin={isAdmin ?? false}
-              currentUserId={user?.id ?? 0}
-              groupId={Number(id)}
-              onRemove={handleRemoveMember}
-            />
-          ))}
         </ScrollView>
-      )}
 
-      {/* ── Balances Tab (lazy-loaded component) ──────────────────────── */}
-      {activeTab === 'balances' && (
-        <View style={{ flex: 1 }}>
-          {/* Inline import to avoid circular dep */}
-          <BalancesTabContent groupId={Number(id)} userId={user?.id ?? 0} />
+        {isAdmin ? (
+          <View style={styles.actionRow}>
+            <Button title="Add Member" onPress={() => setShowAddMember(true)} style={{ flex: 1 }} variant="secondary" size="sm" />
+            <Button title="Share Invite" onPress={() => createInvite.mutate()} style={{ flex: 1 }} loading={createInvite.isPending} size="sm" />
+            <Button title="Edit Group" onPress={openSettings} style={{ flex: 1 }} variant="ghost" size="sm" />
+          </View>
+        ) : null}
+
+        <View style={styles.tabSwitcher}>
+          {(['expenses', 'balances', 'audit'] as GroupTab[]).map((item) => {
+            const label = item === 'expenses' ? 'Expenses' : item === 'balances' ? 'Balances' : 'Audit Trail';
+            const icon = item === 'expenses' ? 'bolt' : item === 'balances' ? 'account-balance' : 'manage-search';
+            const active = item === tab;
+
+            return (
+              <Pressable key={item} onPress={() => setTab(item)} style={[styles.tabPill, active && styles.tabPillActive]}>
+                <MaterialIcons color={active ? Colors.primaryInk : 'rgba(233,234,248,0.5)'} name={icon} size={16} />
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+              </Pressable>
+            );
+          })}
         </View>
-      )}
 
-      {/* ── Audit Tab ──────────────────────────────────────────────────── */}
-      {activeTab === 'audit' && (
-        <View style={{ flex: 1 }}>
-          <AuditTabContent groupId={Number(id)} />
-        </View>
-      )}
+        {tab === 'expenses' ? (
+          <View style={styles.section}>
+            {expensesQuery.isLoading ? (
+              <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
+            ) : (
+              expensesQuery.data?.map((expense) => {
+                const visual = categoryStyles[expense.category] || categoryStyles.misc;
+                return (
+                  <Pressable
+                    key={expense.id}
+                    onPress={() => router.push(`/expense/${expense.id}?groupId=${id}`)}
+                    style={({ pressed }) => [pressed && { opacity: 0.92 }]}
+                  >
+                    <Card style={styles.expenseCard}>
+                      <View style={[styles.expenseIconWrap, { backgroundColor: visual.bg }]}>
+                        <MaterialIcons color={visual.text} name={visual.icon} size={24} />
+                      </View>
+                      <View style={styles.expenseBody}>
+                        <View style={styles.expenseTop}>
+                          <Text style={styles.expenseTitle}>{expense.description}</Text>
+                          <Text style={styles.expenseAmount}>₹{(expense.amount / 100).toFixed(0)}</Text>
+                        </View>
+                        <View style={styles.expenseBottom}>
+                          <Text style={styles.expenseMeta}>
+                            Paid by {expense.paid_by_user.name || expense.paid_by_user.phone} • {expense.split_type.toUpperCase()}
+                          </Text>
+                          {expense.is_disputed ? (
+                            <Text style={[styles.statusChip, { color: Colors.danger }]}>DISPUTED</Text>
+                          ) : expense.proof_attachments.length ? (
+                            <Text style={styles.statusChip}>PROOF</Text>
+                          ) : (
+                            <Text style={[styles.statusChip, { color: Colors.warning }]}>PENDING</Text>
+                          )}
+                        </View>
+                      </View>
+                    </Card>
+                  </Pressable>
+                );
+              })
+            )}
+          </View>
+        ) : null}
 
-      {/* FAB for add expense */}
-      {activeTab === 'expenses' && (
-        <TouchableOpacity
-          style={[styles.fab, Shadow.lg]}
-          onPress={() => router.push(`/add-expense?groupId=${id}`)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      )}
+        {tab === 'balances' ? (
+          <View style={styles.section}>
+            <Pressable onPress={() => router.push(`/settlements?groupId=${id}`)}>
+              <Card>
+                <Text style={styles.panelTitle}>Settlement Command</Text>
+                <Text style={styles.panelCopy}>Open the full balance matrix and complete pending payment confirmations.</Text>
+                {(balancesQuery.data?.optimized_settlements || []).slice(0, 3).map((instruction, index) => (
+                  <View key={`${instruction.payer_id}-${index}`} style={styles.inlineTransfer}>
+                    <Text style={styles.inlineTransferText}>{instruction.payer_name}</Text>
+                    <Text style={styles.inlineTransferAmount}>₹{(instruction.amount / 100).toFixed(0)}</Text>
+                    <Text style={styles.inlineTransferText}>{instruction.receiver_name}</Text>
+                  </View>
+                ))}
+              </Card>
+            </Pressable>
+          </View>
+        ) : null}
 
-      {/* Add member modal */}
-      <Modal visible={showAddMember} transparent animationType="slide">
+        {tab === 'audit' ? (
+          <View style={styles.section}>
+            <Pressable onPress={() => router.push(`/audit?groupId=${id}`)}>
+              <Card>
+                <Text style={styles.panelTitle}>Immutable Audit Ledger</Text>
+                <Text style={styles.panelCopy}>Recent tamper-evident events from this group.</Text>
+                {(auditQuery.data || []).map((event) => (
+                  <View key={event.id} style={styles.auditRow}>
+                    <Text style={styles.auditType}>{event.event_type.replaceAll('_', ' ').toUpperCase()}</Text>
+                    <Text style={styles.auditMeta}>{event.actor.name || event.actor.phone}</Text>
+                  </View>
+                ))}
+              </Card>
+            </Pressable>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <Pressable onPress={() => router.push(`/add-expense?groupId=${id}`)} style={styles.fab}>
+        <MaterialIcons color={Colors.primaryInk} name="add" size={30} />
+      </Pressable>
+      <FloatingDock current="groups" />
+
+      <Modal animationType="slide" transparent visible={showAddMember}>
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={[styles.modalCard, Shadow.lg]}>
-              <Text style={styles.modalTitle}>Add Member</Text>
-              <Text style={styles.modalSub}>Enter their phone number (must be registered on SplitSure)</Text>
-              <Input
-                label="Phone Number"
-                value={newPhone}
-                onChangeText={v => { setNewPhone(v); setPhoneError(''); }}
-                keyboardType="phone-pad"
-                placeholder="+91 98765 43210"
-                error={phoneError}
-                autoFocus
-              />
-              <View style={styles.modalActions}>
-                <Button
-                  title="Cancel"
-                  onPress={() => { setShowAddMember(false); setNewPhone(''); setPhoneError(''); }}
-                  variant="ghost"
-                  style={{ flex: 1, marginRight: Spacing.sm }}
-                />
-                <Button
-                  title="Add Member"
-                  onPress={() => addMemberMutation.mutate()}
-                  loading={addMemberMutation.isPending}
-                  style={{ flex: 1.5 }}
-                />
-              </View>
+          <Card style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add Member</Text>
+            <Text style={styles.modalCopy}>In dev mode, adding a new phone number will create a placeholder account automatically.</Text>
+            <Input
+              label="Phone Number"
+              value={memberPhone}
+              onChangeText={(value) => {
+                setMemberPhone(value);
+                setMemberError('');
+              }}
+              error={memberError}
+              placeholder="+91 9876543210"
+              keyboardType="phone-pad"
+            />
+            <View style={styles.modalActions}>
+              <Button title="Cancel" onPress={() => setShowAddMember(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button title="Add" onPress={() => addMember.mutate()} style={{ flex: 1.3 }} loading={addMember.isPending} />
             </View>
-          </KeyboardAvoidingView>
+          </Card>
         </View>
       </Modal>
-    </View>
+
+      <Modal animationType="slide" transparent visible={showSettings}>
+        <View style={styles.modalOverlay}>
+          <Card style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Group Settings</Text>
+            <Input
+              label="Group Name"
+              value={groupName}
+              onChangeText={(value) => {
+                setGroupName(value);
+                setGroupError('');
+              }}
+              error={groupError}
+              placeholder="Enter group name"
+            />
+            <Input
+              label="Description"
+              value={groupDescription}
+              onChangeText={setGroupDescription}
+              placeholder="Optional description"
+            />
+            <View style={styles.modalActions}>
+              <Button title="Close" onPress={() => setShowSettings(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button title="Save" onPress={() => updateGroup.mutate()} style={{ flex: 1.2 }} loading={updateGroup.isPending} />
+            </View>
+            <Button
+              title="Archive Group"
+              onPress={() => Alert.alert('Archive group', 'Archive this group and remove it from active lists?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Archive', style: 'destructive', onPress: () => archiveGroup.mutate() },
+              ])}
+              variant="danger"
+              loading={archiveGroup.isPending}
+              style={{ marginTop: Spacing.sm }}
+            />
+          </Card>
+        </View>
+      </Modal>
+    </AppBackdrop>
   );
 }
 
-// ── Inline Balances Tab ───────────────────────────────────────────────────────
-function BalancesTabContent({ groupId, userId }: { groupId: number; userId: number }) {
-  const router = useRouter();
-  return (
-    <View style={{ flex: 1, padding: Spacing.base }}>
-      <Card style={{ alignItems: 'center', padding: Spacing.xl }}>
-        <Text style={{ fontSize: 48, marginBottom: Spacing.md }}>⚖️</Text>
-        <Text style={{ fontSize: Typography.lg, fontWeight: '800', color: Colors.textPrimary, marginBottom: 6, textAlign: 'center' }}>
-          View Balances & Settle Up
-        </Text>
-        <Text style={{ fontSize: Typography.sm, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.lg }}>
-          See who owes what and pay directly via UPI
-        </Text>
-        <Button
-          title="Open Balances"
-          onPress={() => router.push(`/balances?groupId=${groupId}`)}
-          size="lg"
-          style={{ width: '100%' }}
-        />
-      </Card>
-    </View>
-  );
-}
-
-// ── Inline Audit Tab ──────────────────────────────────────────────────────────
-function AuditTabContent({ groupId }: { groupId: number }) {
-  const router = useRouter();
-  return (
-    <View style={{ flex: 1, padding: Spacing.base }}>
-      <Card style={{ alignItems: 'center', padding: Spacing.xl }}>
-        <Text style={{ fontSize: 48, marginBottom: Spacing.md }}>🔒</Text>
-        <Text style={{ fontSize: Typography.lg, fontWeight: '800', color: Colors.textPrimary, marginBottom: 6, textAlign: 'center' }}>
-          Immutable Audit Trail
-        </Text>
-        <Text style={{ fontSize: Typography.sm, color: Colors.textSecondary, textAlign: 'center', marginBottom: Spacing.lg }}>
-          Every action is permanently recorded. Nothing can be hidden.
-        </Text>
-        <Button
-          title="View Full Audit Log"
-          onPress={() => router.push(`/audit?groupId=${groupId}`)}
-          size="lg"
-          style={{ width: '100%' }}
-        />
-      </Card>
-    </View>
-  );
-}
-
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-
-  groupHeader: {
-    backgroundColor: Colors.surface,
+  scroll: {
     paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingTop: Spacing.sm,
+    paddingBottom: 170,
   },
-  groupHeaderTop: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md },
-  groupIconWrap: {
-    width: 52, height: 52, borderRadius: Radius.md,
-    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
-    marginRight: Spacing.md,
+  groupHeading: {
+    color: Colors.textPrimary,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    textTransform: 'uppercase',
   },
-  groupIconText: { fontSize: 24, color: Colors.textInverse, fontWeight: '800' },
-  groupHeaderInfo: { flex: 1 },
-  groupName: { fontSize: Typography.lg, fontWeight: '800', color: Colors.textPrimary },
-  groupDesc: { fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 2 },
-  groupMeta: { fontSize: Typography.xs, color: Colors.textTertiary, marginTop: 2 },
-  pdfBtn: {
-    paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs,
-    backgroundColor: Colors.primaryLight, borderRadius: Radius.sm,
-    borderWidth: 1, borderColor: Colors.primary,
+  memberStrip: {
+    gap: Spacing.sm,
+    paddingBottom: Spacing.base,
   },
-  pdfBtnText: { fontSize: Typography.xs, fontWeight: '700', color: Colors.primary },
-
-  statsRow: { flexDirection: 'row', paddingVertical: Spacing.sm },
-  statItem: { flex: 1, alignItems: 'center' },
-  statVal: { fontSize: Typography.lg, fontWeight: '800', color: Colors.textPrimary },
-  statLabel: { fontSize: Typography.xs, color: Colors.textTertiary, marginTop: 2 },
-  statDivider: { width: 1, backgroundColor: Colors.border },
-
-  tabBar: {
-    flexDirection: 'row', backgroundColor: Colors.surface,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  memberCard: {
+    width: 92,
+    minHeight: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.sm,
   },
-  tab: { flex: 1, paddingVertical: Spacing.md, alignItems: 'center' },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: Colors.primary },
-  tabText: { fontSize: 11, fontWeight: '600', color: Colors.textTertiary },
-  tabTextActive: { color: Colors.primary, fontWeight: '700' },
-
-  searchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: Spacing.base, paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  memberCardActive: {
+    borderColor: Colors.ghostBorderStrong,
+    ...Shadow.glowSm,
   },
-  listContent: { padding: Spacing.base, paddingBottom: 100 },
-
-  expRow: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: Colors.surface, borderRadius: Radius.lg,
-    padding: Spacing.md, marginBottom: Spacing.sm,
+  memberRemove: {
+    position: 'absolute',
+    right: 6,
+    top: 6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  expCatDot: { width: 44, height: 44, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', marginRight: Spacing.md },
-  expCatIcon: { fontSize: 22 },
-  expInfo: { flex: 1 },
-  expTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  expDesc: { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary, flex: 1, marginRight: Spacing.sm },
-  expAmount: { fontSize: Typography.md, fontWeight: '800', color: Colors.primary },
-  expBottomRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  expMeta: { fontSize: Typography.xs, color: Colors.textSecondary },
-  expTime: { fontSize: Typography.xs, color: Colors.textTertiary },
-  expFlags: { flexDirection: 'row', marginTop: 6, gap: Spacing.xs },
-  expFlag: { backgroundColor: Colors.primaryLight, borderRadius: Radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  expFlagText: { fontSize: 10, fontWeight: '600', color: Colors.primary },
-
-  memberActions: { flexDirection: 'row', marginBottom: Spacing.md },
-  memberRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.surface, borderRadius: Radius.lg,
-    padding: Spacing.md, marginBottom: Spacing.sm,
+  memberName: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 8,
   },
-  memberInfo: { flex: 1, marginLeft: Spacing.md },
-  memberName: { fontSize: Typography.base, fontWeight: '700', color: Colors.textPrimary },
-  memberPhone: { fontSize: Typography.xs, color: Colors.textSecondary, marginTop: 2 },
-  memberUpi: { fontSize: Typography.xs, color: Colors.success, marginTop: 2 },
-  memberRight: { alignItems: 'flex-end', gap: Spacing.xs },
-  removeBtn: {
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: Colors.dangerLight, alignItems: 'center', justifyContent: 'center',
+  memberRole: {
+    color: Colors.textMuted,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginTop: 4,
   },
-  removeBtnText: { fontSize: 12, color: Colors.danger, fontWeight: '700' },
-
+  memberNet: {
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.base,
+  },
+  tabSwitcher: {
+    flexDirection: 'row',
+    borderRadius: Radius.full,
+    backgroundColor: Colors.glass,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+    padding: 6,
+    gap: 6,
+    marginBottom: Spacing.xl,
+  },
+  tabPill: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  tabPillActive: {
+    backgroundColor: Colors.primary,
+  },
+  tabText: {
+    color: 'rgba(233,234,248,0.5)',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tabTextActive: {
+    color: Colors.primaryInk,
+  },
+  section: {
+    gap: Spacing.md,
+  },
+  expenseCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.base,
+  },
+  expenseIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expenseBody: {
+    flex: 1,
+  },
+  expenseTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  expenseTitle: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: Typography.lg,
+    fontWeight: '800',
+  },
+  expenseAmount: {
+    color: Colors.textPrimary,
+    fontSize: Typography.md,
+    fontWeight: '800',
+  },
+  expenseBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: Spacing.sm,
+  },
+  expenseMeta: {
+    flex: 1,
+    color: 'rgba(233,234,248,0.45)',
+    fontSize: 12,
+  },
+  statusChip: {
+    color: Colors.secondary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  panelTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.lg,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  panelCopy: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    marginBottom: Spacing.lg,
+  },
+  inlineTransfer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  inlineTransferText: {
+    color: Colors.textPrimary,
+    fontSize: Typography.base,
+    fontWeight: '700',
+  },
+  inlineTransferAmount: {
+    color: Colors.secondary,
+    fontSize: Typography.base,
+    fontWeight: '800',
+  },
+  auditRow: {
+    paddingVertical: 10,
+  },
+  auditType: {
+    color: Colors.textPrimary,
+    fontSize: Typography.sm,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  auditMeta: {
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
   fab: {
-    position: 'absolute', bottom: 24, right: 24,
-    width: 58, height: 58, borderRadius: 29,
-    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute',
+    right: Spacing.base,
+    bottom: 118,
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadow.glowMd,
   },
-  fabText: { fontSize: 30, color: Colors.textInverse, fontWeight: '300', lineHeight: 36 },
-
-  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: Colors.overlay,
+    padding: Spacing.base,
+  },
   modalCard: {
-    backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
-    padding: Spacing.xl, paddingBottom: Spacing.xxxl,
+    marginBottom: Spacing.lg,
   },
-  modalTitle: { fontSize: Typography.xl, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
-  modalSub: { fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: Spacing.lg },
-  modalActions: { flexDirection: 'row', marginTop: Spacing.sm },
+  modalTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.xl,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  modalCopy: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    marginBottom: Spacing.lg,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
 });

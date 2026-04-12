@@ -154,7 +154,11 @@ async def add_member(
     result = await db.execute(select(User).where(User.phone == body.phone))
     new_user = result.scalar_one_or_none()
     if not new_user:
-        raise HTTPException(404, "User with this phone number not found")
+        if not settings.USE_DEV_OTP:
+            raise HTTPException(404, "User with this phone number not found")
+        new_user = User(phone=body.phone)
+        db.add(new_user)
+        await db.flush()
 
     existing = await _get_member(db, group_id, new_user.id)
     if existing:

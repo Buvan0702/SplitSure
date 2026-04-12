@@ -104,6 +104,16 @@ class GroupOut(BaseModel):
 class AddMemberRequest(BaseModel):
     phone: str
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        v = v.strip().replace(" ", "")
+        if not v.startswith("+"):
+            v = "+91" + v
+        if len(v) < 10:
+            raise ValueError("Invalid phone number")
+        return v
+
 
 class InviteLinkOut(BaseModel):
     token: str
@@ -248,6 +258,13 @@ class SettlementCreate(BaseModel):
     receiver_id: int
     amount: int
 
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Amount must be greater than 0")
+        return v
+
 
 class SettlementOut(BaseModel):
     id: int
@@ -278,6 +295,14 @@ class DisputeSettlementRequest(BaseModel):
 
 class ResolveDisputeRequest(BaseModel):
     resolution_note: str
+
+    @field_validator("resolution_note")
+    @classmethod
+    def validate_resolution_note(cls, v):
+        value = v.strip()
+        if len(value) < 5:
+            raise ValueError("Resolution note must be at least 5 characters")
+        return value
 
 
 # ─── Audit ───────────────────────────────────────────────────────────────────

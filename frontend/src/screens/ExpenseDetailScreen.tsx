@@ -6,8 +6,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { expensesAPI } from '../services/api';
-import { Expense, CATEGORY_ICONS, CATEGORY_COLORS } from '../types';
+import { expensesAPI, groupsAPI } from '../services/api';
+import { Expense, Group, CATEGORY_ICONS, CATEGORY_COLORS } from '../types';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
 import { Button, Card, Avatar, Badge, Input, Divider } from '../components/ui';
 import { useAuthStore } from '../store/authStore';
@@ -33,6 +33,15 @@ export default function ExpenseDetailScreen() {
     },
   });
 
+  const { data: group } = useQuery({
+    queryKey: ['group', groupId],
+    queryFn: async () => {
+      const { data } = await groupsAPI.get(Number(groupId));
+      return data as Group;
+    },
+    enabled: !!groupId,
+  });
+
   const disputeMutation = useMutation({
     mutationFn: () => expensesAPI.dispute(Number(groupId), Number(id), disputeNote),
     onSuccess: () => {
@@ -51,6 +60,16 @@ export default function ExpenseDetailScreen() {
       router.back();
     },
     onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Cannot delete expense'),
+  });
+
+  const resolveDisputeMutation = useMutation({
+    mutationFn: () => expensesAPI.resolveDispute(Number(groupId), Number(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expense', id] });
+      queryClient.invalidateQueries({ queryKey: ['expenses', groupId] });
+      Alert.alert('Dispute resolved');
+    },
+    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to resolve dispute'),
   });
 
   const handleDelete = () => {
@@ -121,6 +140,7 @@ export default function ExpenseDetailScreen() {
   const myShare = expense.splits.find(s => s.user.id === user?.id);
   const catColor = CATEGORY_COLORS[expense.category];
   const canEdit = !expense.is_settled && !expense.is_disputed;
+  const isAdmin = (group?.members || []).some((member) => member.user.id === user?.id && member.role === 'admin');
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
@@ -260,15 +280,23 @@ export default function ExpenseDetailScreen() {
       </Card>
 
       {/* Dispute section */}
-      {expense.is_disputed && expense.dispute_note && (
-        <Card style={[styles.section, styles.disputeCard]}>
-          <Text style={styles.disputeTitle}>⚠️ Dispute Active</Text>
-          <Text style={styles.disputeNote}>{expense.dispute_note}</Text>
-          <Text style={styles.disputeFooter}>
-            Raised by {expense.dispute_raised_by ? 'a group member' : 'unknown'} · Frozen until resolved by admin
-          </Text>
-        </Card>
-      )}
+        {expense.is_disputed && expense.dispute_note && (
+          <Card style={[styles.section, styles.disputeCard]}>
+            <Text style={styles.disputeTitle}>⚠️ Dispute Active</Text>
+            <Text style={styles.disputeNote}>{expense.dispute_note}</Text>
+            <Text style={styles.disputeFooter}>
+              Raised by a group member · Frozen until resolved by admin
+            </Text>
+            {isAdmin ? (
+              <Button
+                title="Resolve Dispute"
+                onPress={() => resolveDisputeMutation.mutate()}
+                loading={resolveDisputeMutation.isPending}
+                style={{ marginTop: Spacing.sm }}
+              />
+            ) : null}
+          </Card>
+        )}
 
       {/* Actions */}
       <View style={styles.actions}>

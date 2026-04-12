@@ -85,6 +85,17 @@ async def generate_report(
     # Compute balances
     expense_data = [(e.paid_by, [(s.user_id, s.amount) for s in e.splits]) for e in expenses]
     balances = compute_net_balances(expense_data)
+
+    result = await db.execute(
+        select(Settlement)
+        .where(Settlement.group_id == group_id)
+        .where(Settlement.status == SettlementStatus.CONFIRMED)
+    )
+    confirmed_settlements = result.scalars().all()
+    for settlement in confirmed_settlements:
+        balances[settlement.payer_id] = balances.get(settlement.payer_id, 0) + settlement.amount
+        balances[settlement.receiver_id] = balances.get(settlement.receiver_id, 0) - settlement.amount
+
     transactions = minimize_transactions(balances)
     user_map = {m.user_id: m.user for m in group.members}
 

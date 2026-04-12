@@ -31,6 +31,13 @@ async def _require_membership(db, group_id, user_id):
     return member
 
 
+async def _get_user_ids_for_group(db: AsyncSession, group_id: int) -> set[int]:
+    result = await db.execute(
+        select(GroupMember.user_id).where(GroupMember.group_id == group_id)
+    )
+    return set(result.scalars().all())
+
+
 @router.get("/balances", response_model=GroupBalancesOut)
 async def get_balances(
     group_id: int,
@@ -56,6 +63,17 @@ async def get_balances(
         expense_data.append((exp.paid_by, splits_list))
 
     balances = compute_net_balances(expense_data)
+
+    confirmed_result = await db.execute(
+        select(Settlement)
+        .where(Settlement.group_id == group_id)
+        .where(Settlement.status == SettlementStatus.CONFIRMED)
+    )
+    confirmed_settlements = confirmed_result.scalars().all()
+    for settlement in confirmed_settlements:
+        balances[settlement.payer_id] = balances.get(settlement.payer_id, 0) + settlement.amount
+        balances[settlement.receiver_id] = balances.get(settlement.receiver_id, 0) - settlement.amount
+
     transactions = minimize_transactions(balances)
 
     # Load all members to map user details
@@ -125,9 +143,12 @@ async def initiate_settlement(
     db: AsyncSession = Depends(get_db),
 ):
     await _require_membership(db, group_id, current_user.id)
+    member_ids = await _get_user_ids_for_group(db, group_id)
 
     if body.receiver_id == current_user.id:
         raise HTTPException(400, "Cannot settle with yourself")
+    if body.receiver_id not in member_ids:
+        raise HTTPException(400, "Receiver must be a member of this group")
 
     settlement = Settlement(
         group_id=group_id,
@@ -257,6 +278,8 @@ async def resolve_settlement_dispute(
     settlement = result.scalar_one_or_none()
     if not settlement:
         raise HTTPException(404, "Settlement not found")
+    if settlement.status != SettlementStatus.DISPUTED:
+        raise HTTPException(400, "Only disputed settlements can be resolved")
 
     settlement.status = SettlementStatus.CONFIRMED
     settlement.resolution_note = body.resolution_note

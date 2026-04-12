@@ -2,6 +2,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from app.api.v1 import router as api_router
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -38,6 +39,20 @@ app.include_router(api_router, prefix="/api/v1")
 async def create_database_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("""
+            CREATE OR REPLACE FUNCTION prevent_audit_log_mutation()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                RAISE EXCEPTION 'audit_logs is append-only and cannot be modified or deleted';
+            END;
+            $$ LANGUAGE plpgsql;
+        """))
+        await conn.execute(text("DROP TRIGGER IF EXISTS audit_log_immutable ON audit_logs"))
+        await conn.execute(text("""
+            CREATE TRIGGER audit_log_immutable
+            BEFORE UPDATE OR DELETE ON audit_logs
+            FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_mutation();
+        """))
 
 
 @app.get("/health")
@@ -46,5 +61,5 @@ async def health_check():
         "status": "ok",
         "version": "1.0.0",
         "storage": "local" if settings.USE_LOCAL_STORAGE else "s3",
-        "otp_mode": "dev (returned in response)",
+        "otp_mode": "dev (returned in response)" if settings.USE_DEV_OTP else "provider",
     }

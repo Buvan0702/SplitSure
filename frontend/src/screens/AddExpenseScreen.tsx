@@ -1,356 +1,407 @@
 import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Switch, Alert,
-} from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { groupsAPI, expensesAPI } from '../services/api';
-import { Group, SplitType, ExpenseCategory, CATEGORY_ICONS, CATEGORY_COLORS } from '../types';
-import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
-import { Button, Input, Avatar, Card } from '../components/ui';
-import { useAuthStore } from '../store/authStore';
+import { MaterialIcons } from '@expo/vector-icons';
+import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
+import { Button, Card, Input } from '../components/ui';
+import { expensesAPI, groupsAPI } from '../services/api';
+import { ExpenseCategory, Group, SplitType } from '../types';
+import { Colors, Radius, Spacing, Typography } from '../utils/theme';
 
-const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
+const categories: Array<{ value: ExpenseCategory; label: string }> = [
   { value: 'food', label: 'Food' },
   { value: 'transport', label: 'Transport' },
-  { value: 'accommodation', label: 'Stay' },
+  { value: 'accommodation', label: 'Hotel' },
   { value: 'utilities', label: 'Utilities' },
-  { value: 'misc', label: 'Misc' },
-];
-
-const SPLIT_TYPES: { value: SplitType; label: string; desc: string }[] = [
-  { value: 'equal', label: 'Equal', desc: 'Split evenly among all' },
-  { value: 'exact', label: 'Exact', desc: 'Specify each person\'s share' },
-  { value: 'percentage', label: '%', desc: 'Split by percentage' },
+  { value: 'misc', label: 'Entertainment' },
 ];
 
 export default function AddExpenseScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
 
+  const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [amountStr, setAmountStr] = useState('');
-  const [category, setCategory] = useState<ExpenseCategory>('misc');
+  const [category, setCategory] = useState<ExpenseCategory>('food');
   const [splitType, setSplitType] = useState<SplitType>('equal');
-  const [selectedMembers, setSelectedMembers] = useState<Set<number>>(new Set());
   const [exactAmounts, setExactAmounts] = useState<Record<number, string>>({});
   const [percentages, setPercentages] = useState<Record<number, string>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [proofFile, setProofFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
 
-  const { data: group } = useQuery({
+  const groupQuery = useQuery({
     queryKey: ['group', groupId],
     queryFn: async () => {
       const { data } = await groupsAPI.get(Number(groupId));
       return data as Group;
     },
-    onSuccess: (g: Group) => {
-      // Select all members by default
-      setSelectedMembers(new Set(g.members.map(m => m.user.id)));
-    },
   });
 
-  const createMutation = useMutation({
-    mutationFn: (payload: any) => expensesAPI.create(Number(groupId), payload),
+  const createExpense = useMutation({
+    mutationFn: async () => {
+      const amountPaise = Math.round(parseFloat(amount || '0') * 100);
+      if (!description.trim() || amountPaise <= 0) {
+        throw new Error('Enter a valid amount and description');
+      }
+
+      const members = groupQuery.data?.members || [];
+      const splits = members.map((member) => {
+        if (splitType === 'exact') {
+          return {
+            user_id: member.user.id,
+            amount: Math.round(parseFloat(exactAmounts[member.user.id] || '0') * 100),
+          };
+        }
+        if (splitType === 'percentage') {
+          return {
+            user_id: member.user.id,
+            percentage: parseFloat(percentages[member.user.id] || '0'),
+          };
+        }
+        return { user_id: member.user.id };
+      });
+
+      const createResponse = await expensesAPI.create(Number(groupId), {
+        amount: amountPaise,
+        description: description.trim(),
+        category,
+        split_type: splitType,
+        splits,
+      });
+
+      if (proofFile) {
+        const formData = new FormData();
+        formData.append(
+          'file',
+          {
+            uri: proofFile.uri,
+            name: proofFile.name,
+            type: proofFile.mimeType || 'application/octet-stream',
+          } as any,
+        );
+        await expensesAPI.uploadAttachment(Number(groupId), createResponse.data.id, formData);
+      }
+
+      return createResponse;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses', groupId] });
       queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
       router.back();
     },
-    onError: (e: any) => {
-      Alert.alert('Error', e?.response?.data?.detail || 'Failed to add expense');
+    onError: (error: any) => {
+      Alert.alert(error?.message || error?.response?.data?.detail || 'Failed to create expense');
     },
   });
 
-  const amountPaise = Math.round(parseFloat(amountStr || '0') * 100);
-  const members = group?.members || [];
-  const selectedMembersList = members.filter(m => selectedMembers.has(m.user.id));
-
-  const toggleMember = (userId: number) => {
-    const next = new Set(selectedMembers);
-    if (next.has(userId)) {
-      if (next.size <= 1) return; // At least 1 member
-      next.delete(userId);
-    } else {
-      next.add(userId);
+  const pickProof = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true, multiple: false });
+    if (!result.canceled) {
+      setProofFile(result.assets[0]);
     }
-    setSelectedMembers(next);
   };
 
-  const getEqualShare = () => {
-    if (selectedMembersList.length === 0) return 0;
-    return Math.floor(amountPaise / selectedMembersList.length);
-  };
-
-  const getTotalExact = () =>
-    Object.values(exactAmounts).reduce((s, v) => s + Math.round(parseFloat(v || '0') * 100), 0);
-
-  const getTotalPct = () =>
-    Object.values(percentages).reduce((s, v) => s + parseFloat(v || '0'), 0);
-
-  const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!description.trim()) errs.description = 'Description is required';
-    if (!amountStr || amountPaise <= 0) errs.amount = 'Enter a valid amount';
-    if (splitType === 'exact') {
-      const total = getTotalExact();
-      if (total !== amountPaise) errs.splits = `Amounts must sum to ₹${(amountPaise/100).toFixed(2)} (currently ₹${(total/100).toFixed(2)})`;
-    }
-    if (splitType === 'percentage') {
-      const total = getTotalPct();
-      if (Math.abs(total - 100) > 0.01) errs.splits = `Percentages must sum to 100% (currently ${total.toFixed(1)}%)`;
-    }
-    setErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleSubmit = () => {
-    if (!validate()) return;
-
-    const splits = selectedMembersList.map(m => {
-      if (splitType === 'equal') return { user_id: m.user.id };
-      if (splitType === 'exact') return {
-        user_id: m.user.id,
-        amount: Math.round(parseFloat(exactAmounts[m.user.id] || '0') * 100),
-      };
-      return {
-        user_id: m.user.id,
-        percentage: parseFloat(percentages[m.user.id] || '0'),
-      };
-    });
-
-    createMutation.mutate({
-      amount: amountPaise,
-      description: description.trim(),
-      category,
-      split_type: splitType,
-      splits,
-    });
-  };
+  const amountValue = Math.round(parseFloat(amount || '0') * 100);
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* Amount */}
-        <Card style={styles.amountCard}>
-          <Text style={styles.sectionLabel}>Total Amount</Text>
+    <AppBackdrop>
+      <TopBar leftIcon="arrow-back" onLeftPress={() => router.back()} title="SPLITSURE" subtitle="Expense Architect" />
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.amountHero}>
+          <Text style={styles.amountLabel}>Transaction Value</Text>
           <View style={styles.amountRow}>
-            <Text style={styles.rupeeSign}>₹</Text>
+            <Text style={styles.currency}>₹</Text>
             <Input
-              value={amountStr}
-              onChangeText={v => { setAmountStr(v); setErrors(e => ({ ...e, amount: '' })); }}
+              containerStyle={{ flex: 1, marginBottom: 0 }}
+              value={amount}
+              onChangeText={setAmount}
               keyboardType="decimal-pad"
               placeholder="0.00"
               style={styles.amountInput}
-              error={errors.amount}
-              containerStyle={{ flex: 1, marginBottom: 0 }}
             />
+          </View>
+        </View>
+
+        <Card style={styles.detailCard}>
+          <Input
+            label="Floating Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="GALAXY GATE DINNER & STAY"
+          />
+          <Text style={styles.sectionOverline}>Expense Category</Text>
+          <View style={styles.chipWrap}>
+            {categories.map((item) => {
+              const active = item.value === category;
+              return (
+                <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, active && styles.categoryChipActive]}>
+                  <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{item.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </Card>
 
-        {/* Description */}
-        <Input
-          label="What's it for?"
-          value={description}
-          onChangeText={v => { setDescription(v); setErrors(e => ({ ...e, description: '' })); }}
-          placeholder="e.g., Lunch at Café, Train tickets"
-          error={errors.description}
-        />
-
-        {/* Category */}
-        <Text style={styles.sectionLabel}>Category</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catScroll}>
-          {CATEGORIES.map(c => (
-            <TouchableOpacity
-              key={c.value}
-              onPress={() => setCategory(c.value)}
-              style={[
-                styles.catChip,
-                category === c.value && {
-                  backgroundColor: CATEGORY_COLORS[c.value],
-                  borderColor: CATEGORY_COLORS[c.value],
-                },
-              ]}
-            >
-              <Text style={styles.catIcon}>{CATEGORY_ICONS[c.value]}</Text>
-              <Text style={[
-                styles.catLabel,
-                category === c.value && { color: Colors.textInverse },
-              ]}>{c.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Split Type */}
-        <Text style={[styles.sectionLabel, { marginTop: Spacing.lg }]}>Split Type</Text>
-        <View style={styles.splitTypeRow}>
-          {SPLIT_TYPES.map(s => (
-            <TouchableOpacity
-              key={s.value}
-              onPress={() => setSplitType(s.value)}
-              style={[
-                styles.splitTypeBtn,
-                splitType === s.value && styles.splitTypeBtnActive,
-              ]}
-            >
-              <Text style={[
-                styles.splitTypeName,
-                splitType === s.value && { color: Colors.primary },
-              ]}>{s.label}</Text>
-              <Text style={styles.splitTypeDesc}>{s.desc}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionOverline}>Split Mode</Text>
+          <View style={styles.toggle}>
+            {(['equal', 'exact', 'percentage'] as SplitType[]).map((value) => {
+              const active = value === splitType;
+              return (
+                <Pressable key={value} onPress={() => setSplitType(value)} style={[styles.toggleChip, active && styles.toggleChipActive]}>
+                  <Text style={[styles.toggleText, active && styles.toggleTextActive]}>{value === 'percentage' ? 'PERCENT' : value.toUpperCase()}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Members */}
-        <Text style={[styles.sectionLabel, { marginTop: Spacing.lg }]}>Split Among</Text>
-        {members.map(m => {
-          const selected = selectedMembers.has(m.user.id);
-          const isMe = m.user.id === user?.id;
-          const share = selected ? getEqualShare() : 0;
-
-          return (
-            <TouchableOpacity
-              key={m.user.id}
-              onPress={() => toggleMember(m.user.id)}
-              style={[styles.memberRow, !selected && styles.memberRowUnsel]}
-            >
-              <View style={styles.memberLeft}>
-                <Avatar name={m.user.name || m.user.phone} size={38} />
-                <View style={styles.memberText}>
-                  <Text style={styles.memberName}>
-                    {m.user.name || m.user.phone}{isMe ? ' (You)' : ''}
-                  </Text>
-                  {splitType === 'equal' && selected && amountPaise > 0 && (
-                    <Text style={styles.memberShare}>₹{(share / 100).toFixed(2)}</Text>
-                  )}
-                </View>
+        <Card style={styles.memberTable}>
+          {(groupQuery.data?.members || []).map((member) => (
+            <View key={member.id} style={styles.memberRow}>
+              <View>
+                <Text style={styles.memberName}>{member.user.name || member.user.phone}</Text>
+                <Text style={styles.memberRole}>{member.role}</Text>
               </View>
+              {splitType === 'equal' ? (
+                <Text style={styles.memberValue}>
+                  ₹{groupQuery.data?.members.length ? (amountValue / Math.max(groupQuery.data.members.length, 1) / 100).toFixed(2) : '0.00'}
+                </Text>
+              ) : null}
+              {splitType === 'exact' ? (
+                <Input
+                  containerStyle={{ marginBottom: 0, width: 110 }}
+                  value={exactAmounts[member.user.id] || ''}
+                  onChangeText={(value) => setExactAmounts((current) => ({ ...current, [member.user.id]: value }))}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                />
+              ) : null}
+              {splitType === 'percentage' ? (
+                <Input
+                  containerStyle={{ marginBottom: 0, width: 110 }}
+                  value={percentages[member.user.id] || ''}
+                  onChangeText={(value) => setPercentages((current) => ({ ...current, [member.user.id]: value }))}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  rightAddon={<Text style={styles.memberRole}>%</Text>}
+                />
+              ) : null}
+            </View>
+          ))}
+        </Card>
 
-              <View style={styles.memberRight}>
-                {splitType === 'exact' && selected && (
-                  <Input
-                    value={exactAmounts[m.user.id] || ''}
-                    onChangeText={v => setExactAmounts(prev => ({ ...prev, [m.user.id]: v }))}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
-                    containerStyle={{ marginBottom: 0, width: 90 }}
-                    style={styles.splitInput}
-                    leftIcon={<Text style={styles.smallRupee}>₹</Text>}
-                  />
-                )}
-                {splitType === 'percentage' && selected && (
-                  <Input
-                    value={percentages[m.user.id] || ''}
-                    onChangeText={v => setPercentages(prev => ({ ...prev, [m.user.id]: v }))}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    containerStyle={{ marginBottom: 0, width: 80 }}
-                    style={styles.splitInput}
-                    rightIcon={<Text style={styles.pctSign}>%</Text>}
-                  />
-                )}
-                <View style={[styles.checkbox, selected && styles.checkboxActive]}>
-                  {selected && <Text style={styles.checkmark}>✓</Text>}
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {errors.splits && (
-          <Text style={styles.splitError}>{errors.splits}</Text>
-        )}
-
-        {/* Summary for exact/pct */}
-        {splitType === 'exact' && amountPaise > 0 && (
-          <View style={styles.splitSummary}>
-            <Text style={styles.splitSummaryText}>
-              Remaining: ₹{((amountPaise - getTotalExact()) / 100).toFixed(2)}
-            </Text>
+        <Card style={styles.vaultCard}>
+          <View style={styles.vaultHeader}>
+            <Text style={styles.vaultTitle}>PROOF VAULT</Text>
+            <Text style={styles.vaultSeal}>TAMPER-PROOF</Text>
           </View>
-        )}
-        {splitType === 'percentage' && (
-          <View style={styles.splitSummary}>
-            <Text style={styles.splitSummaryText}>
-              Total: {getTotalPct().toFixed(1)}% {Math.abs(getTotalPct() - 100) < 0.01 ? '✅' : ''}
-            </Text>
+          <View style={styles.vaultGrid}>
+            <Pressable onPress={pickProof} style={styles.uploadZone}>
+              <MaterialIcons color={Colors.textSecondary} name="photo-camera" size={28} />
+              <Text style={styles.uploadText}>{proofFile ? proofFile.name : 'Add Invoice Proof'}</Text>
+            </Pressable>
+            <View style={styles.proofMeta}>
+              <Text style={styles.proofHash}>{proofFile ? 'Proof selected and queued for lock' : 'No proof attached yet'}</Text>
+              <Text style={styles.proofTime}>Attachment is uploaded after the expense is created.</Text>
+            </View>
           </View>
-        )}
+        </Card>
 
-        <Button
-          title="Add Expense"
-          onPress={handleSubmit}
-          loading={createMutation.isPending}
-          size="lg"
-          style={{ marginTop: Spacing.xl }}
-        />
+        <Button title="LOCK EXPENSE TO LEDGER" onPress={() => createExpense.mutate()} loading={createExpense.isPending} />
       </ScrollView>
-    </KeyboardAvoidingView>
+      <FloatingDock current="activity" />
+    </AppBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  scroll: { padding: Spacing.base, paddingBottom: 80 },
-
-  amountCard: { alignItems: 'center', marginBottom: Spacing.lg, backgroundColor: Colors.primary },
-  amountRow: { flexDirection: 'row', alignItems: 'center' },
-  rupeeSign: { fontSize: 36, fontWeight: '300', color: Colors.textInverse, marginRight: 4, marginBottom: 2 },
-  amountInput: { fontSize: 42, fontWeight: '700', color: Colors.textInverse, textAlign: 'left', height: 60 },
-
-  sectionLabel: { fontSize: Typography.sm, fontWeight: '700', color: Colors.textSecondary, marginBottom: Spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
-
-  catScroll: { marginBottom: Spacing.md },
-  catChip: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm, borderRadius: Radius.full,
-    borderWidth: 1.5, borderColor: Colors.border, marginRight: Spacing.sm,
-    backgroundColor: Colors.surface,
+  scroll: {
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.base,
+    paddingBottom: 170,
   },
-  catIcon: { fontSize: 16, marginRight: 4 },
-  catLabel: { fontSize: Typography.sm, fontWeight: '600', color: Colors.textSecondary },
-
-  splitTypeRow: { flexDirection: 'row', gap: Spacing.sm },
-  splitTypeBtn: {
-    flex: 1, padding: Spacing.md, borderRadius: Radius.md,
-    borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface,
+  amountHero: {
     alignItems: 'center',
+    paddingVertical: Spacing.xl,
   },
-  splitTypeBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  splitTypeName: { fontSize: Typography.md, fontWeight: '800', color: Colors.textSecondary },
-  splitTypeDesc: { fontSize: Typography.xs, color: Colors.textTertiary, marginTop: 2, textAlign: 'center' },
-
+  amountLabel: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs,
+    fontWeight: '800',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.md,
+  },
+  currency: {
+    color: Colors.textPrimary,
+    fontSize: 48,
+    fontWeight: '300',
+    marginRight: 8,
+  },
+  amountInput: {
+    fontSize: 48,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  detailCard: {
+    marginBottom: Spacing.xl,
+  },
+  sectionOverline: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.sm,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceLowest,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+  },
+  categoryChipActive: {
+    backgroundColor: 'rgba(29,251,165,0.1)',
+    borderColor: 'rgba(29,251,165,0.2)',
+  },
+  categoryChipText: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    fontWeight: '700',
+  },
+  categoryChipTextActive: {
+    color: Colors.secondary,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.base,
+    gap: Spacing.sm,
+  },
+  toggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+    padding: 4,
+  },
+  toggleChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: Radius.sm,
+  },
+  toggleChipActive: {
+    backgroundColor: Colors.primary,
+  },
+  toggleText: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  toggleTextActive: {
+    color: Colors.primaryInk,
+  },
+  memberTable: {
+    paddingVertical: 0,
+    marginBottom: Spacing.xl,
+  },
   memberRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.md,
-    marginBottom: Spacing.sm, borderWidth: 1.5, borderColor: Colors.border,
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  memberRowUnsel: { opacity: 0.4 },
-  memberLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  memberText: { marginLeft: Spacing.sm },
-  memberName: { fontSize: Typography.base, fontWeight: '600', color: Colors.textPrimary },
-  memberShare: { fontSize: Typography.sm, color: Colors.primary, fontWeight: '700', marginTop: 2 },
-  memberRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  splitInput: { fontSize: Typography.sm, height: 40, paddingHorizontal: 4 },
-  smallRupee: { fontSize: Typography.sm, color: Colors.textSecondary },
-  pctSign: { fontSize: Typography.sm, color: Colors.textSecondary },
-  checkbox: {
-    width: 24, height: 24, borderRadius: 12, borderWidth: 2,
-    borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
+  memberName: {
+    color: Colors.textPrimary,
+    fontSize: Typography.base,
+    fontWeight: '700',
   },
-  checkboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  checkmark: { color: Colors.textInverse, fontSize: 14, fontWeight: '700' },
-
-  splitError: { color: Colors.danger, fontSize: Typography.sm, marginTop: Spacing.xs, textAlign: 'center' },
-  splitSummary: {
-    backgroundColor: Colors.primaryLight, borderRadius: Radius.md,
-    padding: Spacing.sm, marginTop: Spacing.sm, alignItems: 'center',
+  memberRole: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginTop: 4,
   },
-  splitSummaryText: { color: Colors.primary, fontWeight: '700', fontSize: Typography.sm },
+  memberValue: {
+    color: Colors.secondary,
+    fontSize: Typography.base,
+    fontWeight: '800',
+  },
+  vaultCard: {
+    marginBottom: Spacing.xl,
+  },
+  vaultHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  vaultTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.lg,
+    fontWeight: '800',
+  },
+  vaultSeal: {
+    color: Colors.secondary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  vaultGrid: {
+    gap: Spacing.base,
+  },
+  uploadZone: {
+    minHeight: 180,
+    borderRadius: Radius.md,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.14)',
+  },
+  uploadText: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    fontWeight: '700',
+  },
+  proofMeta: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.base,
+  },
+  proofHash: {
+    color: Colors.textPrimary,
+    fontSize: Typography.sm,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  proofTime: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+  },
 });
