@@ -32,6 +32,25 @@ async def _check_rate_limit(db: AsyncSession, phone: str):
         raise HTTPException(429, "Too many OTP requests. Try again in an hour.")
 
 
+async def _send_sms_otp(phone: str, otp: str):
+    import httpx
+    from app.core.config import settings
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                "https://api.msg91.com/api/v5/otp",
+                json={
+                    "template_id": settings.MSG91_TEMPLATE_ID,
+                    "mobile": phone.lstrip("+"),
+                    "authkey": settings.MSG91_AUTH_KEY,
+                    "otp": otp,
+                },
+                timeout=10.0,
+            )
+    except httpx.RequestError:
+        pass
+
+
 @router.post("/send-otp")
 async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
     await _check_rate_limit(db, body.phone)
