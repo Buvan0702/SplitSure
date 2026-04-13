@@ -6,6 +6,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { expensesAPI, groupsAPI } from '../services/api';
 import { Expense, Group, CATEGORY_ICONS, CATEGORY_COLORS } from '../types';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
@@ -22,7 +24,7 @@ export default function ExpenseDetailScreen() {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputeError, setDisputeError] = useState('');
-  const [selectedProof, setSelectedProof] = useState<string | null>(null);
+  const [selectedProof, setSelectedProof] = useState<{ url: string; fileName: string; mimeType: string } | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
 
   const { data: expense, isLoading, refetch } = useQuery({
@@ -126,6 +128,28 @@ export default function ExpenseDetailScreen() {
       return;
     }
     disputeMutation.mutate();
+  };
+
+  const downloadProof = async (url: string, fileName: string, mimeType: string) => {
+    try {
+      const target = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
+      const download = await FileSystem.downloadAsync(url, target);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(download.uri, { mimeType });
+      } else {
+        Alert.alert('Proof Ready', `Saved to ${download.uri}`);
+      }
+    } catch {
+      Alert.alert('Download failed', 'Unable to open this attachment right now.');
+    }
+  };
+
+  const openProofAttachment = async (url: string, fileName: string, mimeType: string) => {
+    if (mimeType.startsWith('image/')) {
+      setSelectedProof({ url, fileName, mimeType });
+      return;
+    }
+    await downloadProof(url, fileName, mimeType);
   };
 
   if (isLoading || !expense) {
@@ -246,7 +270,7 @@ export default function ExpenseDetailScreen() {
             {expense.proof_attachments.map(att => (
               <TouchableOpacity
                 key={att.id}
-                onPress={() => att.presigned_url && setSelectedProof(att.presigned_url)}
+                onPress={() => att.presigned_url && openProofAttachment(att.presigned_url, att.file_name, att.mime_type)}
                 style={styles.proofThumb}
               >
                 {att.presigned_url && att.mime_type.startsWith('image/') ? (
@@ -321,16 +345,26 @@ export default function ExpenseDetailScreen() {
       {/* Proof viewer modal */}
       <Modal visible={!!selectedProof} transparent animationType="fade">
         <View style={styles.proofModal}>
-          <TouchableOpacity style={styles.proofModalClose} onPress={() => setSelectedProof(null)}>
-            <Text style={styles.proofModalCloseText}>✕ Close</Text>
-          </TouchableOpacity>
-          {selectedProof && (
+          <View style={styles.proofModalHeader}>
+            <TouchableOpacity style={styles.proofModalClose} onPress={() => setSelectedProof(null)}>
+              <Text style={styles.proofModalCloseText}>✕ Close</Text>
+            </TouchableOpacity>
+            {selectedProof ? (
+              <TouchableOpacity
+                style={styles.proofModalDownload}
+                onPress={() => downloadProof(selectedProof.url, selectedProof.fileName, selectedProof.mimeType)}
+              >
+                <Text style={styles.proofModalCloseText}>Download</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {selectedProof ? (
             <Image
-              source={{ uri: selectedProof }}
+              source={{ uri: selectedProof.url }}
               style={styles.proofModalImage}
               resizeMode="contain"
             />
-          )}
+          ) : null}
         </View>
       </Modal>
 
@@ -461,7 +495,18 @@ const styles = StyleSheet.create({
   actions: { marginTop: Spacing.md, gap: Spacing.sm },
 
   proofModal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' },
-  proofModalClose: { position: 'absolute', top: 50, right: 20, padding: Spacing.md, zIndex: 10 },
+  proofModalHeader: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  proofModalClose: { padding: Spacing.md },
+  proofModalDownload: { padding: Spacing.md },
   proofModalCloseText: { color: Colors.textInverse, fontSize: Typography.base, fontWeight: '600' },
   proofModalImage: { width: '100%', height: '80%' },
 

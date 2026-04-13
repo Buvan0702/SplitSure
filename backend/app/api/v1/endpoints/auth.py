@@ -117,6 +117,7 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
 async def logout(
     credentials=Depends(bearer_scheme),
     current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    blacklist_token(credentials.credentials)
+    await blacklist_token(credentials.credentials, db)
     return {"message": "Logged out successfully"}

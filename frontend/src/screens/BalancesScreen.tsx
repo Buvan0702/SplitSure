@@ -12,10 +12,14 @@ import { Button, Card, Avatar, Badge, Input, EmptyState } from '../components/ui
 import { useAuthStore } from '../store/authStore';
 
 const UPI_APPS = [
-  { name: 'GPay', icon: '🟢', scheme: 'gpay' },
-  { name: 'PhonePe', icon: '🟣', scheme: 'phonepe' },
-  { name: 'Paytm', icon: '💙', scheme: 'paytm' },
+  { name: 'GPay', icon: '🟢', scheme: 'gpay://' },
+  { name: 'PhonePe', icon: '🟣', scheme: 'phonepe://' },
+  { name: 'Paytm', icon: '💙', scheme: 'paytmmp://' },
 ];
+
+function buildUpiIntent(baseLink: string, appScheme: string) {
+  return baseLink.replace(/^upi:\/\//, appScheme);
+}
 
 function BalanceCard({ instruction, isMySettlement, onSettle }: {
   instruction: SettlementInstruction;
@@ -24,14 +28,25 @@ function BalanceCard({ instruction, isMySettlement, onSettle }: {
 }) {
   const amountRs = (instruction.amount / 100).toFixed(2);
 
-  const openUPI = (appScheme: string) => {
+  const openUPI = async (appScheme: string) => {
     if (!instruction.upi_deep_link) {
       Alert.alert('No UPI ID', 'The receiver has not registered a UPI ID yet.');
       return;
     }
-    Linking.openURL(instruction.upi_deep_link).catch(() => {
-      Alert.alert('App not found', `${appScheme} is not installed on this device.`);
-    });
+    const appLink = buildUpiIntent(instruction.upi_deep_link, appScheme);
+    try {
+      if (await Linking.canOpenURL(appLink)) {
+        await Linking.openURL(appLink);
+        return;
+      }
+      if (await Linking.canOpenURL(instruction.upi_deep_link)) {
+        await Linking.openURL(instruction.upi_deep_link);
+        return;
+      }
+      Alert.alert('App not found', 'No compatible UPI app is installed on this device.');
+    } catch {
+      Alert.alert('Unable to open UPI app', 'The selected payment app could not be launched.');
+    }
   };
 
   return (
@@ -57,7 +72,9 @@ function BalanceCard({ instruction, isMySettlement, onSettle }: {
               {UPI_APPS.map(app => (
                 <TouchableOpacity
                   key={app.name}
-                  onPress={() => openUPI(app.scheme)}
+                  onPress={() => {
+                    void openUPI(app.scheme);
+                  }}
                   style={styles.upiBtn}
                 >
                   <Text style={styles.upiIcon}>{app.icon}</Text>

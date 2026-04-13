@@ -20,6 +20,7 @@ def build_split_payloads(
     amount: int,
     split_type: SplitType,
     splits: list[SplitInput],
+    paid_by_user_id: int | None = None,
 ) -> list[dict]:
     if split_type == SplitType.EXACT:
         total = sum(split.amount or 0 for split in splits)
@@ -61,11 +62,16 @@ def build_split_payloads(
     share_count = len(splits)
     base_share = amount // share_count
     remainder = amount % share_count
+    remainder_user_id = paid_by_user_id if paid_by_user_id in {split.user_id for split in splits} else None
     return [
         {
             "user_id": split.user_id,
             "split_type": split_type,
-            "amount": base_share + (1 if index < remainder else 0),
+            "amount": base_share + (
+                remainder if split.user_id == remainder_user_id else
+                1 if remainder_user_id is None and index < remainder else
+                0
+            ),
             "percentage": split.percentage,
         }
         for index, split in enumerate(splits)

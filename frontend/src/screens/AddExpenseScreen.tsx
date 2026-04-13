@@ -47,6 +47,10 @@ export default function AddExpenseScreen() {
       }
 
       const members = groupQuery.data?.members || [];
+      if (!members.length) {
+        throw new Error('Group members are still loading');
+      }
+
       const splits = members.map((member) => {
         if (splitType === 'exact') {
           return {
@@ -62,6 +66,20 @@ export default function AddExpenseScreen() {
         }
         return { user_id: member.user.id };
       });
+
+      if (splitType === 'exact') {
+        const exactTotal = splits.reduce((sum, split) => sum + (split.amount || 0), 0);
+        if (exactTotal !== amountPaise) {
+          throw new Error('Exact split amounts must add up to the full expense');
+        }
+      }
+
+      if (splitType === 'percentage') {
+        const totalPercentage = splits.reduce((sum, split) => sum + (split.percentage || 0), 0);
+        if (Math.abs(totalPercentage - 100) > 0.01) {
+          throw new Error('Percentages must add up to 100%');
+        }
+      }
 
       const createResponse = await expensesAPI.create(Number(groupId), {
         amount: amountPaise,

@@ -21,6 +21,18 @@ def test_build_equal_split_payloads_distributes_remainder():
         1001,
         SplitType.EQUAL,
         [SplitInput(user_id=1), SplitInput(user_id=2), SplitInput(user_id=3)],
+        paid_by_user_id=2,
+    )
+
+    assert [payload["amount"] for payload in payloads] == [333, 335, 333]
+
+
+def test_build_equal_split_payloads_falls_back_to_first_users_without_payer():
+    payloads = build_split_payloads(
+        1001,
+        SplitType.EQUAL,
+        [SplitInput(user_id=1), SplitInput(user_id=2), SplitInput(user_id=3)],
+        paid_by_user_id=99,
     )
 
     assert [payload["amount"] for payload in payloads] == [334, 334, 333]

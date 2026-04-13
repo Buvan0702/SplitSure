@@ -11,7 +11,7 @@ from app.models.user import (
     ProofAttachment, AuditEventType, ExpenseCategory
 )
 from app.schemas.schemas import (
-    ExpenseCreate, ExpenseUpdate, ExpenseOut, DisputeRequest, ProofAttachmentOut
+    ExpenseCreate, ExpenseUpdate, ExpenseOut, DisputeRequest, ProofAttachmentOut, SplitInput
 )
 from app.services.audit_service import log_event
 from app.services.expense_service import build_split_payloads, validate_split_users
@@ -82,6 +82,15 @@ def _expense_to_dict(expense: Expense) -> dict:
         "category": expense.category.value,
         "split_type": expense.split_type.value,
         "paid_by": expense.paid_by,
+        "splits": [
+            {
+                "user_id": split.user_id,
+                "amount": split.amount,
+                "percentage": float(split.percentage) if split.percentage is not None else None,
+                "split_type": split.split_type.value,
+            }
+            for split in expense.splits
+        ],
     }
 
 
@@ -96,6 +105,41 @@ def _build_expense_out(expense: Expense) -> dict:
     return expense_dict
 
 
+async def _rebuild_splits_for_update(
+    db: AsyncSession,
+    group_id: int,
+    expense: Expense,
+    body: ExpenseUpdate,
+) -> None:
+    split_inputs = body.splits
+    next_split_type = body.split_type or expense.split_type
+
+    if split_inputs is None and body.amount is None and body.split_type is None:
+        return
+
+    if split_inputs is None:
+        if next_split_type == SplitType.EXACT:
+            raise HTTPException(400, "Exact split updates require split amounts")
+        split_inputs = [
+            SplitInput(
+                user_id=split.user_id,
+                percentage=float(split.percentage) if split.percentage is not None else None,
+            )
+            for split in expense.splits
+        ]
+
+    member_ids = await _get_group_member_ids(db, group_id)
+    validate_split_users(split_inputs, member_ids)
+    split_payloads = build_split_payloads(
+        expense.amount,
+        next_split_type,
+        split_inputs,
+        paid_by_user_id=expense.paid_by,
+    )
+    expense.split_type = next_split_type
+    await _replace_splits(db, expense, split_payloads)
+
+
 @router.post("", response_model=ExpenseOut, status_code=201)
 async def create_expense(
     group_id: int,
@@ -106,7 +150,12 @@ async def create_expense(
     await _require_membership(db, group_id, current_user.id)
     member_ids = await _get_group_member_ids(db, group_id)
     validate_split_users(body.splits, member_ids)
-    split_payloads = build_split_payloads(body.amount, body.split_type, body.splits)
+    split_payloads = build_split_payloads(
+        body.amount,
+        body.split_type,
+        body.splits,
+        paid_by_user_id=current_user.id,
+    )
 
     expense = Expense(
         group_id=group_id,
@@ -196,15 +245,7 @@ async def update_expense(
         expense.description = body.description
     if body.category is not None:
         expense.category = body.category
-    if body.split_type is not None:
-        expense.split_type = body.split_type
-
-    if body.splits is not None:
-        member_ids = await _get_group_member_ids(db, group_id)
-        validate_split_users(body.splits, member_ids)
-        next_split_type = body.split_type or expense.split_type
-        split_payloads = build_split_payloads(expense.amount, next_split_type, body.splits)
-        await _replace_splits(db, expense, split_payloads)
+    await _rebuild_splits_for_update(db, group_id, expense, body)
 
     await log_event(
         db, group_id, AuditEventType.EXPENSE_EDITED, current_user.id,
@@ -231,12 +272,13 @@ async def delete_expense(
     if expense.is_disputed:
         raise HTTPException(400, "Cannot delete a disputed expense")
 
+    before = _expense_to_dict(expense)
     expense.is_deleted = True
 
     await log_event(
         db, group_id, AuditEventType.EXPENSE_DELETED, current_user.id,
         entity_id=expense_id,
-        before_json=_expense_to_dict(expense),
+        before_json=before,
     )
 
     await db.commit()
@@ -320,10 +362,7 @@ async def upload_attachment(
     if existing_count >= settings.MAX_ATTACHMENTS_PER_EXPENSE:
         raise HTTPException(400, f"Maximum {settings.MAX_ATTACHMENTS_PER_EXPENSE} attachments per expense")
 
-    s3_key, file_hash = await upload_proof(file, expense_id, current_user.id)
-
-    content = await file.seek(0)
-    file_size = file.size or 0
+    s3_key, file_hash, file_size = await upload_proof(file, expense_id, current_user.id)
 
     attachment = ProofAttachment(
         expense_id=expense_id,

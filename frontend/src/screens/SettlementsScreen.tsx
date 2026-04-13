@@ -13,9 +13,9 @@ import { Colors, Radius, Spacing, Typography } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
 const upiApps = [
-  { name: 'GPay', icon: 'G', color: '#1A73E8' },
-  { name: 'PhonePe', icon: 'P', color: '#5F259F' },
-  { name: 'Paytm', icon: 'Y', color: '#00BAF2' },
+  { name: 'GPay', icon: 'G', color: '#1A73E8', scheme: 'gpay://' },
+  { name: 'PhonePe', icon: 'P', color: '#5F259F', scheme: 'phonepe://' },
+  { name: 'Paytm', icon: 'Y', color: '#00BAF2', scheme: 'paytmmp://' },
 ];
 
 function toBase64(bytes: Uint8Array) {
@@ -32,6 +32,14 @@ function toBase64(bytes: Uint8Array) {
     result += i + 2 < bytes.length ? chars[triple & 63] : '=';
   }
   return result;
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
+}
+
+function buildUpiIntent(baseLink: string, appScheme: string) {
+  return baseLink.replace(/^upi:\/\//, appScheme);
 }
 
 export default function SettlementsScreen() {
@@ -121,11 +129,14 @@ export default function SettlementsScreen() {
 
   const generateReport = useMutation({
     mutationFn: () => reportsAPI.generate(Number(groupId)),
-    onSuccess: async ({ data }) => {
+    onSuccess: async ({ data, headers }) => {
       try {
         const bytes = new Uint8Array(data as ArrayBuffer);
         const base64 = toBase64(bytes);
-        const fileUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}splitsure-report-${groupId}.pdf`;
+        const disposition = String(headers?.['content-disposition'] || '');
+        const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+        const fileName = sanitizeFileName(match?.[1] || `splitsure-report-${groupId}.pdf`);
+        const fileUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}${fileName}`;
         await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(fileUri, { mimeType: 'application/pdf' });
@@ -194,13 +205,27 @@ export default function SettlementsScreen() {
           {upiApps.map((app) => (
             <Pressable
               key={app.name}
-              onPress={() => {
+              onPress={async () => {
                 const link = myInstructions[0]?.upi_deep_link;
                 if (!link) {
                   Alert.alert('No UPI deep link available');
                   return;
                 }
-                Linking.openURL(link).catch(() => Alert.alert(`Unable to open ${app.name}`));
+                const appLink = buildUpiIntent(link, app.scheme);
+                const fallbackLink = link;
+                try {
+                  if (await Linking.canOpenURL(appLink)) {
+                    await Linking.openURL(appLink);
+                    return;
+                  }
+                  if (await Linking.canOpenURL(fallbackLink)) {
+                    await Linking.openURL(fallbackLink);
+                    return;
+                  }
+                  Alert.alert(`${app.name} unavailable`, 'No compatible UPI app was found on this device.');
+                } catch {
+                  Alert.alert(`Unable to open ${app.name}`);
+                }
               }}
             >
               <Card style={styles.upiCard}>

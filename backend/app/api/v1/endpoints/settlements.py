@@ -77,6 +77,51 @@ async def _optimized_settlement_lookup(db: AsyncSession, group_id: int) -> dict[
     return transaction_lookup(minimize_transactions(adjusted_balances))
 
 
+async def _mark_related_expenses_as_settled(
+    db: AsyncSession,
+    group_id: int,
+    payer_id: int,
+    receiver_id: int,
+    amount: int,
+) -> list[int]:
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.splits))
+        .where(Expense.group_id == group_id)
+        .where(Expense.is_deleted == False)
+        .where(Expense.is_settled == False)
+        .order_by(Expense.created_at.asc())
+    )
+    expenses = result.scalars().all()
+
+    remaining = amount
+    settled_ids: list[int] = []
+
+    for expense in expenses:
+        if remaining <= 0:
+            break
+
+        participants = {split.user_id for split in expense.splits}
+        if participants | {expense.paid_by} != {payer_id, receiver_id}:
+            continue
+
+        if expense.paid_by == receiver_id:
+            owed_share = sum(split.amount for split in expense.splits if split.user_id == payer_id)
+        elif expense.paid_by == payer_id:
+            owed_share = sum(split.amount for split in expense.splits if split.user_id == receiver_id)
+        else:
+            continue
+
+        if owed_share <= 0 or remaining < owed_share:
+            continue
+
+        expense.is_settled = True
+        settled_ids.append(expense.id)
+        remaining -= owed_share
+
+    return settled_ids
+
+
 @router.get("/balances", response_model=GroupBalancesOut)
 async def get_balances(
     group_id: int,
@@ -270,10 +315,18 @@ async def confirm_settlement(
 
     settlement.status = SettlementStatus.CONFIRMED
     settlement.confirmed_at = datetime.now(timezone.utc)
+    settled_expense_ids = await _mark_related_expenses_as_settled(
+        db,
+        group_id,
+        settlement.payer_id,
+        settlement.receiver_id,
+        settlement.amount,
+    )
 
     await log_event(
         db, group_id, AuditEventType.SETTLEMENT_CONFIRMED, current_user.id,
         entity_id=settlement_id,
+        metadata_json={"settled_expense_ids": settled_expense_ids},
     )
 
     await db.commit()
@@ -348,11 +401,18 @@ async def resolve_settlement_dispute(
     settlement.status = SettlementStatus.CONFIRMED
     settlement.resolution_note = body.resolution_note
     settlement.confirmed_at = datetime.now(timezone.utc)
+    settled_expense_ids = await _mark_related_expenses_as_settled(
+        db,
+        group_id,
+        settlement.payer_id,
+        settlement.receiver_id,
+        settlement.amount,
+    )
 
     await log_event(
         db, group_id, AuditEventType.DISPUTE_RESOLVED, current_user.id,
         entity_id=settlement_id,
-        metadata_json={"resolution_note": body.resolution_note},
+        metadata_json={"resolution_note": body.resolution_note, "settled_expense_ids": settled_expense_ids},
     )
 
     await db.commit()

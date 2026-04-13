@@ -91,7 +91,7 @@ async def upload_proof(
     file: UploadFile,
     expense_id: int,
     uploader_id: int,
-) -> Tuple[str, str]:
+) -> Tuple[str, str, int]:
     """
     Upload a proof attachment. Returns (storage_key, file_hash).
     storage_key is a relative path used in both local and S3 modes.
@@ -115,7 +115,7 @@ async def upload_proof(
     else:
         await _s3_upload(content, s3_key, file.content_type or "application/octet-stream")
 
-    return s3_key, file_hash
+    return s3_key, file_hash, len(content)
 
 
 def generate_presigned_url(s3_key: str) -> str:
@@ -137,4 +137,3 @@ def delete_proof(s3_key: str):
     if settings.USE_LOCAL_STORAGE:
         _local_delete(s3_key)
     # S3: no-op — retain files per audit policy
-
