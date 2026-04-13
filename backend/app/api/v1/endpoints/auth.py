@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-import random
+import secrets
 import hashlib
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +36,7 @@ async def _check_rate_limit(db: AsyncSession, phone: str):
 async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
     await _check_rate_limit(db, body.phone)
 
-    otp = str(random.randint(100000, 999999))
+    otp = f"{secrets.randbelow(900000) + 100000}"
     otp_hash = _hash_otp(otp)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
 

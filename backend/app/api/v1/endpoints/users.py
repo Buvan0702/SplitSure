@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
@@ -26,6 +27,11 @@ async def update_me(
     if body.upi_id is not None:
         current_user.upi_id = body.upi_id
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, "Email is already in use")
+
     await db.refresh(current_user)
     return current_user

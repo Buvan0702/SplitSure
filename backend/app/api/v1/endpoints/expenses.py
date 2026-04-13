@@ -14,6 +14,7 @@ from app.schemas.schemas import (
     ExpenseCreate, ExpenseUpdate, ExpenseOut, DisputeRequest, ProofAttachmentOut
 )
 from app.services.audit_service import log_event
+from app.services.expense_service import build_split_payloads, validate_split_users
 from app.services.s3_service import upload_proof, generate_presigned_url
 
 router = APIRouter(prefix="/groups/{group_id}/expenses", tags=["expenses"])
@@ -36,6 +37,23 @@ async def _get_group_member_ids(db: AsyncSession, group_id: int) -> set[int]:
         select(GroupMember.user_id).where(GroupMember.group_id == group_id)
     )
     return set(result.scalars().all())
+
+
+async def _replace_splits(db: AsyncSession, expense: Expense, split_payloads: list[dict]) -> None:
+    for split in list(expense.splits):
+        await db.delete(split)
+    await db.flush()
+
+    for payload in split_payloads:
+        db.add(
+            Split(
+                expense_id=expense.id,
+                user_id=payload["user_id"],
+                split_type=payload["split_type"],
+                amount=payload["amount"],
+                percentage=payload["percentage"],
+            )
+        )
 
 
 async def _load_expense(db: AsyncSession, expense_id: int, group_id: int) -> Expense:
@@ -87,15 +105,8 @@ async def create_expense(
 ):
     await _require_membership(db, group_id, current_user.id)
     member_ids = await _get_group_member_ids(db, group_id)
-
-    split_user_ids = [s.user_id for s in body.splits]
-    if not split_user_ids:
-        raise HTTPException(400, "At least one split is required")
-    if len(split_user_ids) != len(set(split_user_ids)):
-        raise HTTPException(400, "Duplicate users in split are not allowed")
-    invalid_user_ids = [user_id for user_id in split_user_ids if user_id not in member_ids]
-    if invalid_user_ids:
-        raise HTTPException(400, "All split users must be members of the group")
+    validate_split_users(body.splits, member_ids)
+    split_payloads = build_split_payloads(body.amount, body.split_type, body.splits)
 
     expense = Expense(
         group_id=group_id,
@@ -107,36 +118,7 @@ async def create_expense(
     )
     db.add(expense)
     await db.flush()
-
-    # Build splits
-    remainder = body.amount
-    share_count = len(body.splits)
-    extra_shares = body.amount % share_count if body.split_type == SplitType.EQUAL else 0
-    for index, s in enumerate(body.splits):
-        amount = s.amount
-        if body.split_type == SplitType.EQUAL:
-            amount = body.amount // share_count
-            if index < extra_shares:
-                amount += 1
-        elif body.split_type == SplitType.PERCENTAGE:
-            amount = round(body.amount * (float(s.percentage or 0) / 100))
-
-        if amount is None or amount <= 0:
-            raise HTTPException(400, "Split amount must be a positive value")
-
-        remainder -= amount
-
-        split = Split(
-            expense_id=expense.id,
-            user_id=s.user_id,
-            split_type=body.split_type,
-            amount=amount,
-            percentage=s.percentage,
-        )
-        db.add(split)
-
-    if remainder != 0:
-        raise HTTPException(400, "Split amounts must add up to the expense total")
+    await _replace_splits(db, expense, split_payloads)
 
     await log_event(
         db, group_id, AuditEventType.EXPENSE_CREATED, current_user.id,
@@ -214,6 +196,15 @@ async def update_expense(
         expense.description = body.description
     if body.category is not None:
         expense.category = body.category
+    if body.split_type is not None:
+        expense.split_type = body.split_type
+
+    if body.splits is not None:
+        member_ids = await _get_group_member_ids(db, group_id)
+        validate_split_users(body.splits, member_ids)
+        next_split_type = body.split_type or expense.split_type
+        split_payloads = build_split_payloads(expense.amount, next_split_type, body.splits)
+        await _replace_splits(db, expense, split_payloads)
 
     await log_event(
         db, group_id, AuditEventType.EXPENSE_EDITED, current_user.id,

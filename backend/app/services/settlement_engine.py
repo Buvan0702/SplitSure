@@ -2,7 +2,7 @@
 Settlement Engine — Greedy balance optimization.
 Amounts are stored in paise (integer arithmetic to avoid float errors).
 """
-from typing import List, Tuple
+from typing import Iterable, List, Tuple
 from dataclasses import dataclass
 
 
@@ -76,6 +76,24 @@ def minimize_transactions(balances: dict[int, int]) -> List[Transaction]:
             di += 1
 
     return transactions
+
+
+def apply_confirmed_settlements(
+    balances: dict[int, int],
+    settlements: Iterable[Transaction],
+) -> dict[int, int]:
+    adjusted = balances.copy()
+    for settlement in settlements:
+        adjusted[settlement.payer_id] = adjusted.get(settlement.payer_id, 0) + settlement.amount
+        adjusted[settlement.receiver_id] = adjusted.get(settlement.receiver_id, 0) - settlement.amount
+    return adjusted
+
+
+def transaction_lookup(transactions: Iterable[Transaction]) -> dict[tuple[int, int], int]:
+    lookup: dict[tuple[int, int], int] = {}
+    for transaction in transactions:
+        lookup[(transaction.payer_id, transaction.receiver_id)] = transaction.amount
+    return lookup
 
 
 def build_upi_deep_link(upi_id: str, name: str, amount_paise: int, note: str) -> str:

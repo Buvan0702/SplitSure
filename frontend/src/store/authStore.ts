@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { User } from '../types';
-import { authAPI, usersAPI } from '../services/api';
+import { authAPI, registerAuthFailureHandler, usersAPI } from '../services/api';
 
 type SendOtpResponse = {
   message: string;
@@ -18,6 +18,7 @@ interface AuthState {
   sendOTP: (phone: string) => Promise<SendOtpResponse>;
   verifyOTP: (phone: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearSession: () => Promise<void>;
   loadUser: () => Promise<void>;
   updateUser: (data: Partial<User>) => void;
 }
@@ -43,9 +44,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await authAPI.logout();
     } catch {}
+    await get().clearSession();
+  },
+
+  clearSession: async () => {
     await SecureStore.deleteItemAsync('access_token');
     await SecureStore.deleteItemAsync('refresh_token');
-    set({ user: null, isAuthenticated: false });
+    set({ user: null, isAuthenticated: false, isLoading: false });
   },
 
   loadUser: async () => {
@@ -59,7 +64,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data } = await usersAPI.getMe();
       set({ user: data, isAuthenticated: true });
     } catch {
-      set({ user: null, isAuthenticated: false });
+      await get().clearSession();
     } finally {
       set({ isLoading: false });
     }
@@ -70,3 +75,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (current) set({ user: { ...current, ...data } });
   },
 }));
+
+registerAuthFailureHandler(() => {
+  void useAuthStore.getState().clearSession();
+});

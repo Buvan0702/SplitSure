@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import type { ExpenseCategory, SplitType } from '../types';
 
 const DEFAULT_DEV_API_URL = 'https://splitsure.onrender.com/api/v1';
 const DEFAULT_PROD_API_URL = 'https://splitsure.onrender.com/api/v1';
@@ -35,6 +36,11 @@ export const api = axios.create({
 });
 
 let backendWakePromise: Promise<void> | null = null;
+let authFailureHandler: (() => void) | null = null;
+
+export function registerAuthFailureHandler(handler: (() => void) | null) {
+  authFailureHandler = handler;
+}
 
 function isTransientNetworkError(error: unknown) {
   const axiosError = error as AxiosError;
@@ -113,7 +119,7 @@ api.interceptors.response.use(
         processQueue(err as AxiosError, null);
         await SecureStore.deleteItemAsync('access_token');
         await SecureStore.deleteItemAsync('refresh_token');
-        // Trigger logout in store
+        authFailureHandler?.();
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
@@ -182,9 +188,28 @@ export const expensesAPI = {
     api.get(`/groups/${groupId}/expenses`, { params }),
   get: (groupId: number, id: number) =>
     api.get(`/groups/${groupId}/expenses/${id}`),
-  create: (groupId: number, data: any) =>
+  create: (
+    groupId: number,
+    data: {
+      amount: number;
+      description: string;
+      category: ExpenseCategory;
+      split_type: SplitType;
+      splits: Array<{ user_id: number; amount?: number; percentage?: number }>;
+    }
+  ) =>
     api.post(`/groups/${groupId}/expenses`, data),
-  update: (groupId: number, id: number, data: any) =>
+  update: (
+    groupId: number,
+    id: number,
+    data: {
+      amount?: number;
+      description?: string;
+      category?: ExpenseCategory;
+      split_type?: SplitType;
+      splits?: Array<{ user_id: number; amount?: number; percentage?: number }>;
+    }
+  ) =>
     api.patch(`/groups/${groupId}/expenses/${id}`, data),
   delete: (groupId: number, id: number) =>
     api.delete(`/groups/${groupId}/expenses/${id}`),

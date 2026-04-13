@@ -13,7 +13,14 @@ from app.schemas.schemas import (
     GroupBalancesOut, BalanceSummary, SettlementInstruction,
     SettlementCreate, SettlementOut, DisputeSettlementRequest, ResolveDisputeRequest
 )
-from app.services.settlement_engine import compute_net_balances, minimize_transactions, build_upi_deep_link
+from app.services.settlement_engine import (
+    apply_confirmed_settlements,
+    build_upi_deep_link,
+    compute_net_balances,
+    minimize_transactions,
+    transaction_lookup,
+    Transaction,
+)
 from app.services.audit_service import log_event
 
 router = APIRouter(prefix="/groups/{group_id}/settlements", tags=["settlements"])
@@ -36,6 +43,38 @@ async def _get_user_ids_for_group(db: AsyncSession, group_id: int) -> set[int]:
         select(GroupMember.user_id).where(GroupMember.group_id == group_id)
     )
     return set(result.scalars().all())
+
+
+async def _optimized_settlement_lookup(db: AsyncSession, group_id: int) -> dict[tuple[int, int], int]:
+    result = await db.execute(
+        select(Expense)
+        .options(selectinload(Expense.splits))
+        .where(Expense.group_id == group_id)
+        .where(Expense.is_deleted == False)
+        .where(Expense.is_settled == False)
+    )
+    expenses = result.scalars().all()
+    expense_data = [(expense.paid_by, [(split.user_id, split.amount) for split in expense.splits]) for expense in expenses]
+    balances = compute_net_balances(expense_data)
+
+    confirmed_result = await db.execute(
+        select(Settlement)
+        .where(Settlement.group_id == group_id)
+        .where(Settlement.status == SettlementStatus.CONFIRMED)
+    )
+    confirmed_settlements = confirmed_result.scalars().all()
+    adjusted_balances = apply_confirmed_settlements(
+        balances,
+        (
+            Transaction(
+                payer_id=settlement.payer_id,
+                receiver_id=settlement.receiver_id,
+                amount=settlement.amount,
+            )
+            for settlement in confirmed_settlements
+        ),
+    )
+    return transaction_lookup(minimize_transactions(adjusted_balances))
 
 
 @router.get("/balances", response_model=GroupBalancesOut)
@@ -70,11 +109,19 @@ async def get_balances(
         .where(Settlement.status == SettlementStatus.CONFIRMED)
     )
     confirmed_settlements = confirmed_result.scalars().all()
-    for settlement in confirmed_settlements:
-        balances[settlement.payer_id] = balances.get(settlement.payer_id, 0) + settlement.amount
-        balances[settlement.receiver_id] = balances.get(settlement.receiver_id, 0) - settlement.amount
-
-    transactions = minimize_transactions(balances)
+    transactions = minimize_transactions(
+        apply_confirmed_settlements(
+            balances,
+            (
+                Transaction(
+                    payer_id=settlement.payer_id,
+                    receiver_id=settlement.receiver_id,
+                    amount=settlement.amount,
+                )
+                for settlement in confirmed_settlements
+            ),
+        )
+    )
 
     # Load all members to map user details
     result = await db.execute(
@@ -149,6 +196,23 @@ async def initiate_settlement(
         raise HTTPException(400, "Cannot settle with yourself")
     if body.receiver_id not in member_ids:
         raise HTTPException(400, "Receiver must be a member of this group")
+
+    settlement_map = await _optimized_settlement_lookup(db, group_id)
+    expected_amount = settlement_map.get((current_user.id, body.receiver_id))
+    if expected_amount is None:
+        raise HTTPException(400, "No outstanding balance exists for this settlement")
+    if body.amount != expected_amount:
+        raise HTTPException(400, f"Settlement amount must match the outstanding balance of {expected_amount}")
+
+    existing_result = await db.execute(
+        select(Settlement)
+        .where(Settlement.group_id == group_id)
+        .where(Settlement.payer_id == current_user.id)
+        .where(Settlement.receiver_id == body.receiver_id)
+        .where(Settlement.status == SettlementStatus.PENDING)
+    )
+    if existing_result.scalar_one_or_none():
+        raise HTTPException(409, "A pending settlement already exists for this receiver")
 
     settlement = Settlement(
         group_id=group_id,
