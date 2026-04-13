@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Splitsure - Command Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#0b0e17",
+                    "surface-container-highest": "#212533",
+                    "on-primary-fixed-variant": "#0e009d",
+                    "on-tertiary-fixed-variant": "#004f69",
+                    "surface-container-low": "#10131d",
+                    "surface-container": "#161924",
+                    "outline-variant": "#454852",
+                    "secondary-dim": "#00ec9a",
+                    "surface-container-high": "#1b1f2c",
+                    "surface-container-lowest": "#000000",
+                    "on-tertiary": "#004f69",
+                    "on-secondary-fixed": "#00452a",
+                    "inverse-primary": "#494bd7",
+                    "surface-tint": "#a3a6ff",
+                    "tertiary-container": "#7bd1fa",
+                    "surface-variant": "#212533",
+                    "on-error": "#490013",
+                    "inverse-surface": "#faf8ff",
+                    "on-error-container": "#ffb2b9",
+                    "on-primary-container": "#0a0081",
+                    "on-secondary-fixed-variant": "#00653f",
+                    "background": "#0b0e17",
+                    "tertiary-fixed": "#7bd1fa",
+                    "outline": "#727581",
+                    "on-secondary-container": "#e1ffe9",
+                    "error": "#ff6e84",
+                    "error-container": "#a70138",
+                    "tertiary-fixed-dim": "#6cc3eb",
+                    "secondary": "#1dfba5",
+                    "on-primary-fixed": "#000000",
+                    "inverse-on-surface": "#525560",
+                    "on-secondary": "#005a38",
+                    "on-primary": "#0f00a4",
+                    "secondary-fixed": "#1dfba5",
+                    "primary-container": "#9396ff",
+                    "tertiary": "#9bddff",
+                    "primary-dim": "#6063ee",
+                    "tertiary-dim": "#6cc3eb",
+                    "on-tertiary-container": "#00465d",
+                    "surface-bright": "#272c3a",
+                    "primary-fixed": "#9396ff",
+                    "on-surface-variant": "#a8aab7",
+                    "primary": "#a3a6ff",
+                    "surface-dim": "#0b0e17",
+                    "secondary-fixed-dim": "#00ec9a",
+                    "on-tertiary-fixed": "#003041",
+                    "error-dim": "#d73357",
+                    "on-surface": "#e9eaf8",
+                    "primary-fixed-dim": "#8387ff",
+                    "secondary-container": "#006c44",
+                    "on-background": "#e9eaf8"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"],
+                    "mono": ["JetBrains Mono"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .conic-glow {
+            background: conic-gradient(from 180deg at 50% 50%, #6366F1 0deg, #00F5A0 360deg);
+            padding: 1px;
+        }
+        .glass-panel {
+            background: rgba(33, 37, 51, 0.7);
+            -webkit-backdrop-filter: blur(24px);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface font-body min-h-screen pb-32">
+<!-- Top Navigation Shell -->
+<header class="fixed top-0 w-full z-50 bg-[#0b0e17]/80 backdrop-blur-3xl flex justify-between items-center px-6 pt-12 pb-4 w-full">
+<div class="text-2xl font-bold bg-gradient-to-r from-[#6366F1] to-[#00F5A0] bg-clip-text text-transparent drop-shadow-[0_0_10px_rgba(99,102,241,0.5)] font-['Space_Grotesk'] tracking-tighter uppercase">
+            SPLITSURE
+        </div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-[#e9eaf8]/60 hover:opacity-80 transition-opacity" data-icon="settings">settings</button>
+<div class="w-10 h-10 rounded-full border border-primary/20 overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="professional portrait of a young male with short dark hair in a minimalist digital avatar style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkVnzQf6gkIaoDPt-gndWetGFiHaBY8Wrtf9ZSfHp1dlhI_2fjDcQskgeUWSZ8zclpDTQGet-TMEmbEQO5ZncDYdTQPeZt6shTPnjKS8KT7GpBTYAygEjcKWkgZWqDsrrYuD9KqSaz3vVyPQfOD4fEG9ZmOWiQFWsvf8kSBTy2sv4vewpUh0wv-P7AIrGMINm8ZWoQMi9z_JdosU7z4E6_diGq1ihmwm_ZjZdSYxiuj9dig_0-TsWHoi9JId96F8ehoC7YakmKacBS"/>
+</div>
+</div>
+</header>
+<main class="container mx-auto px-6 pt-32 space-y-8">
+<!-- Hero Balance Card -->
+<div class="conic-glow rounded-[32px]">
+<div class="glass-panel w-full rounded-[31px] p-8 flex flex-col items-center text-center relative overflow-hidden">
+<!-- Abstract background texture -->
+<div class="absolute inset-0 opacity-10 pointer-events-none">
+<div class="absolute -top-24 -left-24 w-64 h-64 bg-primary blur-[100px]"></div>
+<div class="absolute -bottom-24 -right-24 w-64 h-64 bg-secondary blur-[100px]"></div>
+</div>
+<span class="font-mono text-xs tracking-[0.3em] text-on-surface-variant mb-2">NET POSITION</span>
+<h1 class="text-7xl md:text-8xl font-headline font-bold text-secondary drop-shadow-[0_0_25px_rgba(29,251,165,0.4)] tracking-tight">
+                    ₹ 3,240
+                </h1>
+<p class="text-on-surface/60 font-body mt-4 text-sm">across 3 active groups</p>
+<div class="flex gap-3 mt-8">
+<div class="bg-surface/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary shadow-[0_0_5px_rgba(29,251,165,0.8)]"></div>
+<span class="text-[10px] font-mono tracking-widest text-on-surface-variant">OWED</span>
+<span class="text-sm font-headline font-bold">₹ 4,080</span>
+</div>
+<div class="bg-surface/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/5 flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-error shadow-[0_0_5px_rgba(255,110,132,0.8)]"></div>
+<span class="text-[10px] font-mono tracking-widest text-on-surface-variant">OWE</span>
+<span class="text-sm font-headline font-bold">₹ 840</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Actions Row -->
+<div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+<button class="flex-none glass-panel px-6 py-4 rounded-2xl flex items-center gap-3 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-primary" data-icon="photo_camera">photo_camera</span>
+<span class="text-sm font-headline font-medium whitespace-nowrap">Scan Receipt</span>
+</button>
+<button class="flex-none glass-panel px-6 py-4 rounded-2xl flex items-center gap-3 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-secondary" data-icon="bolt">bolt</span>
+<span class="text-sm font-headline font-medium whitespace-nowrap">Quick Split</span>
+</button>
+<button class="flex-none glass-panel px-6 py-4 rounded-2xl flex items-center gap-3 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-tertiary" data-icon="payments">payments</span>
+<span class="text-sm font-headline font-medium whitespace-nowrap">Settle Now</span>
+</button>
+</div>
+<!-- Groups Grid -->
+<section>
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-headline text-xl font-bold tracking-tight">Active Groups</h2>
+<button class="text-primary text-xs font-mono uppercase tracking-widest">See All</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Group 1: Goa Trip -->
+<div class="glass-panel p-5 rounded-[20px] hover:border-white/20 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-4">
+<div class="text-3xl">🏖</div>
+<div class="bg-secondary/10 px-3 py-1 rounded-full border border-secondary/20">
+<span class="text-[10px] font-mono font-bold text-secondary">+₹1,200</span>
+</div>
+</div>
+<h3 class="font-headline font-bold text-lg mb-4">Goa Trip 2025</h3>
+<div class="flex justify-between items-end">
+<div class="flex -space-x-2">
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a smiling woman with glasses" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0vFUW7Tqt7xTcGp40fO1TT2Ht8YPgFoF-m_irDH95HyhEvxpfXAbD-qCDDouksV9_WU44HmEP2n-E69Kj3z-n-KUfw6yamvD8iM1YKxsMXdBF9mLjObHRfnBnxStO0RLTo-EMQlcNv_6TF5_uVNOGY6ZZSqGYSXiP3dZEiOefBcogMgsMtGsxMXlvzX9Jx6hA9ItS_TWheHTb18_VczcgoWtqKctThg3eAwjfFtCN3Ai-oiw9ufY7WGMvkLlprGKsz13iJHAjpfnv"/>
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a bearded man with a beanie" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfdbQ0fDctLfzH1vA1bpntuijMPreL7Cc67sAj5PaZGtI4xHk6XF6YTHiy5OTweUtcmvZYMrxtA1zOlLA4moFEafH3TRI7LE87t_HTFqTCUD2Cm_d7uLMyTjBYHn_bUZmd0GhLHUvj1G_dOAuD9f4qBebjGfLjY57KOGSX1LdkZPMSimbLv2nUa5y34-UWeXJiuVk8lXh72fSKJMjTnPl5Wn_UYQAKx93c0Kb3Wlhfj4H_TBPFyL1lmyR4UNO-1ChWc3O3Oe5cbwyI"/>
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a woman with long red hair" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQx_ETVBQ_helUEufQxAK5a5E9KOUGrD-NV-UpXcc8ci9buMcmEkqrwobQaeUOoW8ttg4rrXsV1vA0LpPnSA2LnNDfkwvi-IFlWhssytAbF44rsO4_TqcEYBN3aEWDMxvauk80dcrtItUm-Q5nyTXFPtbWAwwmgKnn_eRLGKcf7-BafOY3ekNDmeWiTLLC_evs9whVjjYP8zpkUZNr64J9iUOqAr2PvKl12EiDXNkXOqW2BkGw9eBGfQ6_hmIdLrSpY4z9Ai9U59WV"/>
+<div class="w-8 h-8 rounded-full bg-surface-container border-2 border-surface flex items-center justify-center text-[10px] text-on-surface-variant font-mono">+2</div>
+</div>
+<div class="flex items-end gap-1 h-8">
+<div class="w-1 bg-secondary opacity-40 rounded-full h-1/2"></div>
+<div class="w-1 bg-secondary opacity-60 rounded-full h-3/4"></div>
+<div class="w-1 bg-secondary opacity-100 rounded-full h-full"></div>
+<div class="w-1 bg-secondary opacity-30 rounded-full h-1/3"></div>
+<div class="w-1 bg-secondary opacity-80 rounded-full h-2/3"></div>
+<div class="w-1 bg-secondary opacity-50 rounded-full h-1/2"></div>
+<div class="w-1 bg-secondary opacity-90 rounded-full h-5/6"></div>
+</div>
+</div>
+</div>
+<!-- Group 2: Flat Expenses -->
+<div class="glass-panel p-5 rounded-[20px] hover:border-white/20 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-4">
+<div class="text-3xl">🏠</div>
+<div class="bg-error/10 px-3 py-1 rounded-full border border-error/20">
+<span class="text-[10px] font-mono font-bold text-error">-₹840</span>
+</div>
+</div>
+<h3 class="font-headline font-bold text-lg mb-4">Flat Expenses</h3>
+<div class="flex justify-between items-end">
+<div class="flex -space-x-2">
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a man with short blonde hair" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA49TMVAiGeM_KQIUXaZ55IC0_Jup6yT1BOBhPo19to44sDjFX4VnFc0H3EuPV86kD_L5K-kU27gmkd9BxDtZ1-JElqYJP0Mdge4Ig5pRCrkyB5IwsyTD_ZsAraJM8JP7dUr8LL9yqh0PSWdYoDGAEdGbAHSVpFnRUcw0jztcfxUbTcgC-vJfLxowBw9BQmiqU5SaQPwp7Q1e2YK6Jdboq3Pc3kyadAqaNlZ2fGKks1x1Fpf1bo_I2UxxM1AOTZJRGRu7MXmIdwY2iB"/>
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a woman with a headscarf" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDlmWRd_BULPWChPz3Ab4s3NxqjRa8_HoGufvLtez6CcMcISZ12gMjSQDHjrgFgZaV2LaLdcUKLVDOlaKV7o8W3ieQ3Zgbd5GFMzjTjwjUebDH8iQeiWHiAK6otIeCxLBO3E25omeZlGLxj-6pxTdFhevjC99hciVQnaKmPW2ptlvzHJXbVvK15amdsoa1s1ILHZlYMtA44kPF8ec3QurIzbeovJ_QCp12NWgvXDq7EFTawa-dcwqx-EswbBXesZp8hUOpqgB2hpSkg"/>
+</div>
+<div class="flex items-end gap-1 h-8">
+<div class="w-1 bg-error opacity-100 rounded-full h-full"></div>
+<div class="w-1 bg-error opacity-40 rounded-full h-1/2"></div>
+<div class="w-1 bg-error opacity-60 rounded-full h-3/4"></div>
+<div class="w-1 bg-error opacity-30 rounded-full h-1/3"></div>
+<div class="w-1 bg-error opacity-80 rounded-full h-2/3"></div>
+<div class="w-1 bg-error opacity-50 rounded-full h-1/2"></div>
+<div class="w-1 bg-error opacity-20 rounded-full h-1/5"></div>
+</div>
+</div>
+</div>
+<!-- Group 3: Office Lunch -->
+<div class="glass-panel p-5 rounded-[20px] hover:border-white/20 transition-all cursor-pointer md:col-span-2">
+<div class="flex justify-between items-center mb-4">
+<div class="flex items-center gap-4">
+<div class="text-3xl">🍱</div>
+<h3 class="font-headline font-bold text-lg">Office Lunch</h3>
+</div>
+<div class="bg-on-surface-variant/10 px-3 py-1 rounded-full border border-on-surface-variant/20">
+<span class="text-[10px] font-mono font-bold text-on-surface-variant">Settled</span>
+</div>
+</div>
+<div class="flex justify-between items-end">
+<div class="flex -space-x-2">
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a man with a mustache" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAC9-37Mqp4yX3eUwVfY2BKROjEyt5sN42SgO5_7S1j-MGrFbiVZdigF5I5k-1rcTJY3U-rENDLA61vy10tkzb4HIabK-5lVVoSyth6MGServgLY-Fm_fIimbU6n4hSVqXP5W8KedZLZsrCXY3JooCFPSvvLKXSnvfNuCJMUx1k4vjHVdzHsBjLlmECwuBbFVdFXWm07MobbS4bzQpQMt_mVuK_KV7dSK1ikjOvQvifwD9OilTMq3KwGnNtgvkU-iJQYvIDglSQxa0A"/>
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a woman with curly hair" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5mLFop0J2Vdq0H_Wg3BoxcUANguAcx6jg0dNSFJapwmk_DR2zq5mjyCSiBvQa0qW9wQivqP-KvPB1VDkyjJv74vAjBY6jTdsdwx9NWb8YAV7WTaqH9a8-ycAQqm7OZ5ixI6qoCWTBuj0GE573G6XuygdNOVumuvULki9jIv1-TOPlxHb_huhvepbbY_LRHfveWXrFV1FtP-Z2xgLmmlXtM_iArWB9j58dzdaUbRhmqk6zxl6oeDwM3Fgoyj18CsPIYc3M5plg_ngk"/>
+<img alt="Member" class="w-8 h-8 rounded-full border-2 border-surface" data-alt="avatar of a man with sunglasses" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDsd5Sf2haisA1oU4jo3TXSV_4VlJT1Hi36cltzDVf8rT-FLJXP_e4b0BV6eSxSnjtjsqcrrilNn0c4Barj7igWArx59sMn_s-u5h-J7F35jInAqYSkl8hj9zl0-ko1kxzIBvZ3BNapauHn6yA_lIzAt3H3JjbdcJ9DKB_09GgBtvBkauPgeKKX55oxFKgY3Rs4VkvHVoO_RC0GDy27lkSK4yXBwiOt271YUVNoPOdiYX6up-AmBm3f0QCbtLcR8VGulLduClSUgALm"/>
+<div class="w-8 h-8 rounded-full bg-surface-container border-2 border-surface flex items-center justify-center text-[10px] text-on-surface-variant font-mono">+8</div>
+</div>
+<div class="flex items-end gap-1 h-8">
+<div class="w-1 bg-outline opacity-20 rounded-full h-1/3"></div>
+<div class="w-1 bg-outline opacity-20 rounded-full h-1/4"></div>
+<div class="w-1 bg-outline opacity-20 rounded-full h-1/5"></div>
+<div class="w-1 bg-outline opacity-20 rounded-full h-1/4"></div>
+<div class="w-1 bg-outline opacity-20 rounded-full h-1/3"></div>
+<div class="w-1 bg-outline opacity-20 rounded-full h-1/2"></div>
+<div class="w-1 bg-outline opacity-20 rounded-full h-1/3"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-8 left-1/2 -translate-x-1/2 flex justify-around items-center py-4 px-2 z-50 w-[90%] max-w-md rounded-[32px] border border-white/10 bg-[#212533]/80 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+<!-- Home (Active) -->
+<a class="flex flex-col items-center justify-center text-[#1dfba5] drop-shadow-[0_0_8px_rgba(29,251,165,0.6)] group transition-all" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Home</span>
+</a>
+<!-- Groups -->
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all group" href="#">
+<span class="material-symbols-outlined mb-1 group-active:scale-90 transition-transform" data-icon="group">group</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Groups</span>
+</a>
+<!-- Activity -->
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all group" href="#">
+<span class="material-symbols-outlined mb-1 group-active:scale-90 transition-transform" data-icon="analytics">analytics</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Activity</span>
+</a>
+<!-- Profile -->
+<a class="flex flex-col items-center justify-center text-[#e9eaf8]/40 hover:text-[#6366F1] transition-all group" href="#">
+<span class="material-symbols-outlined mb-1 group-active:scale-90 transition-transform" data-icon="person">person</span>
+<span class="font-['JetBrains_Mono'] text-[10px] uppercase tracking-widest">Profile</span>
+</a>
+</nav>
+</body></html>

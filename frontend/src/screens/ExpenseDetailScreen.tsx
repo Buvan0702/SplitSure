@@ -6,8 +6,10 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
-import { expensesAPI } from '../services/api';
-import { Expense, CATEGORY_ICONS, CATEGORY_COLORS } from '../types';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import { expensesAPI, groupsAPI } from '../services/api';
+import { Expense, Group, CATEGORY_ICONS, CATEGORY_COLORS } from '../types';
 import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
 import { Button, Card, Avatar, Badge, Input, Divider } from '../components/ui';
 import { useAuthStore } from '../store/authStore';
@@ -22,7 +24,7 @@ export default function ExpenseDetailScreen() {
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputeError, setDisputeError] = useState('');
-  const [selectedProof, setSelectedProof] = useState<string | null>(null);
+  const [selectedProof, setSelectedProof] = useState<{ url: string; fileName: string; mimeType: string } | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
 
   const { data: expense, isLoading, refetch } = useQuery({
@@ -31,6 +33,15 @@ export default function ExpenseDetailScreen() {
       const { data } = await expensesAPI.get(Number(groupId), Number(id));
       return data as Expense;
     },
+  });
+
+  const { data: group } = useQuery({
+    queryKey: ['group', groupId],
+    queryFn: async () => {
+      const { data } = await groupsAPI.get(Number(groupId));
+      return data as Group;
+    },
+    enabled: !!groupId,
   });
 
   const disputeMutation = useMutation({
@@ -51,6 +62,16 @@ export default function ExpenseDetailScreen() {
       router.back();
     },
     onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Cannot delete expense'),
+  });
+
+  const resolveDisputeMutation = useMutation({
+    mutationFn: () => expensesAPI.resolveDispute(Number(groupId), Number(id)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expense', id] });
+      queryClient.invalidateQueries({ queryKey: ['expenses', groupId] });
+      Alert.alert('Dispute resolved');
+    },
+    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to resolve dispute'),
   });
 
   const handleDelete = () => {
@@ -109,6 +130,28 @@ export default function ExpenseDetailScreen() {
     disputeMutation.mutate();
   };
 
+  const downloadProof = async (url: string, fileName: string, mimeType: string) => {
+    try {
+      const target = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
+      const download = await FileSystem.downloadAsync(url, target);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(download.uri, { mimeType });
+      } else {
+        Alert.alert('Proof Ready', `Saved to ${download.uri}`);
+      }
+    } catch {
+      Alert.alert('Download failed', 'Unable to open this attachment right now.');
+    }
+  };
+
+  const openProofAttachment = async (url: string, fileName: string, mimeType: string) => {
+    if (mimeType.startsWith('image/')) {
+      setSelectedProof({ url, fileName, mimeType });
+      return;
+    }
+    await downloadProof(url, fileName, mimeType);
+  };
+
   if (isLoading || !expense) {
     return (
       <View style={styles.loading}>
@@ -121,6 +164,7 @@ export default function ExpenseDetailScreen() {
   const myShare = expense.splits.find(s => s.user.id === user?.id);
   const catColor = CATEGORY_COLORS[expense.category];
   const canEdit = !expense.is_settled && !expense.is_disputed;
+  const isAdmin = (group?.members || []).some((member) => member.user.id === user?.id && member.role === 'admin');
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scroll}>
@@ -226,7 +270,7 @@ export default function ExpenseDetailScreen() {
             {expense.proof_attachments.map(att => (
               <TouchableOpacity
                 key={att.id}
-                onPress={() => att.presigned_url && setSelectedProof(att.presigned_url)}
+                onPress={() => att.presigned_url && openProofAttachment(att.presigned_url, att.file_name, att.mime_type)}
                 style={styles.proofThumb}
               >
                 {att.presigned_url && att.mime_type.startsWith('image/') ? (
@@ -260,15 +304,23 @@ export default function ExpenseDetailScreen() {
       </Card>
 
       {/* Dispute section */}
-      {expense.is_disputed && expense.dispute_note && (
-        <Card style={[styles.section, styles.disputeCard]}>
-          <Text style={styles.disputeTitle}>⚠️ Dispute Active</Text>
-          <Text style={styles.disputeNote}>{expense.dispute_note}</Text>
-          <Text style={styles.disputeFooter}>
-            Raised by {expense.dispute_raised_by ? 'a group member' : 'unknown'} · Frozen until resolved by admin
-          </Text>
-        </Card>
-      )}
+        {expense.is_disputed && expense.dispute_note && (
+          <Card style={[styles.section, styles.disputeCard]}>
+            <Text style={styles.disputeTitle}>⚠️ Dispute Active</Text>
+            <Text style={styles.disputeNote}>{expense.dispute_note}</Text>
+            <Text style={styles.disputeFooter}>
+              Raised by a group member · Frozen until resolved by admin
+            </Text>
+            {isAdmin ? (
+              <Button
+                title="Resolve Dispute"
+                onPress={() => resolveDisputeMutation.mutate()}
+                loading={resolveDisputeMutation.isPending}
+                style={{ marginTop: Spacing.sm }}
+              />
+            ) : null}
+          </Card>
+        )}
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -293,16 +345,26 @@ export default function ExpenseDetailScreen() {
       {/* Proof viewer modal */}
       <Modal visible={!!selectedProof} transparent animationType="fade">
         <View style={styles.proofModal}>
-          <TouchableOpacity style={styles.proofModalClose} onPress={() => setSelectedProof(null)}>
-            <Text style={styles.proofModalCloseText}>✕ Close</Text>
-          </TouchableOpacity>
-          {selectedProof && (
+          <View style={styles.proofModalHeader}>
+            <TouchableOpacity style={styles.proofModalClose} onPress={() => setSelectedProof(null)}>
+              <Text style={styles.proofModalCloseText}>✕ Close</Text>
+            </TouchableOpacity>
+            {selectedProof ? (
+              <TouchableOpacity
+                style={styles.proofModalDownload}
+                onPress={() => downloadProof(selectedProof.url, selectedProof.fileName, selectedProof.mimeType)}
+              >
+                <Text style={styles.proofModalCloseText}>Download</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          {selectedProof ? (
             <Image
-              source={{ uri: selectedProof }}
+              source={{ uri: selectedProof.url }}
               style={styles.proofModalImage}
               resizeMode="contain"
             />
-          )}
+          ) : null}
         </View>
       </Modal>
 
@@ -433,7 +495,18 @@ const styles = StyleSheet.create({
   actions: { marginTop: Spacing.md, gap: Spacing.sm },
 
   proofModal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center' },
-  proofModalClose: { position: 'absolute', top: 50, right: 20, padding: Spacing.md, zIndex: 10 },
+  proofModalHeader: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+  },
+  proofModalClose: { padding: Spacing.md },
+  proofModalDownload: { padding: Spacing.md },
   proofModalCloseText: { color: Colors.textInverse, fontSize: Typography.base, fontWeight: '600' },
   proofModalImage: { width: '100%', height: '80%' },
 

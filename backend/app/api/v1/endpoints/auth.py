@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-import random
+import secrets
 import hashlib
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,17 +32,41 @@ async def _check_rate_limit(db: AsyncSession, phone: str):
         raise HTTPException(429, "Too many OTP requests. Try again in an hour.")
 
 
+async def _send_sms_otp(phone: str, otp: str):
+    import httpx
+    from app.core.config import settings
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                "https://api.msg91.com/api/v5/otp",
+                json={
+                    "template_id": settings.MSG91_TEMPLATE_ID,
+                    "mobile": phone.lstrip("+"),
+                    "authkey": settings.MSG91_AUTH_KEY,
+                    "otp": otp,
+                },
+                timeout=10.0,
+            )
+    except httpx.RequestError:
+        pass
+
+
 @router.post("/send-otp")
 async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
     await _check_rate_limit(db, body.phone)
 
-    otp = str(random.randint(100000, 999999))
+    otp = f"{secrets.randbelow(900000) + 100000}"
     otp_hash = _hash_otp(otp)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
 
     record = OTPRecord(phone=body.phone, otp_hash=otp_hash, expires_at=expires_at)
     db.add(record)
     await db.commit()
+
+    if not settings.USE_DEV_OTP:
+        return {
+            "message": "OTP generated",
+        }
 
     return {
         "message": "OTP generated (dev mode — no SMS sent)",
@@ -112,6 +136,7 @@ async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)
 async def logout(
     credentials=Depends(bearer_scheme),
     current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    blacklist_token(credentials.credentials)
+    await blacklist_token(credentials.credentials, db)
     return {"message": "Logged out successfully"}

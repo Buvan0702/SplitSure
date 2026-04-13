@@ -21,7 +21,7 @@ from app.models.user import (
     Group, GroupMember, Expense, Split, Settlement,
     SettlementStatus, User
 )
-from app.services.settlement_engine import compute_net_balances, minimize_transactions, build_upi_deep_link
+from app.services.settlement_engine import apply_confirmed_settlements, compute_net_balances, minimize_transactions, Transaction
 
 router = APIRouter(prefix="/groups/{group_id}/report", tags=["reports"])
 
@@ -85,7 +85,26 @@ async def generate_report(
     # Compute balances
     expense_data = [(e.paid_by, [(s.user_id, s.amount) for s in e.splits]) for e in expenses]
     balances = compute_net_balances(expense_data)
-    transactions = minimize_transactions(balances)
+
+    result = await db.execute(
+        select(Settlement)
+        .where(Settlement.group_id == group_id)
+        .where(Settlement.status == SettlementStatus.CONFIRMED)
+    )
+    confirmed_settlements = result.scalars().all()
+    transactions = minimize_transactions(
+        apply_confirmed_settlements(
+            balances,
+            (
+                Transaction(
+                    payer_id=settlement.payer_id,
+                    receiver_id=settlement.receiver_id,
+                    amount=settlement.amount,
+                )
+                for settlement in confirmed_settlements
+            ),
+        )
+    )
     user_map = {m.user_id: m.user for m in group.members}
 
     report_id = str(uuid.uuid4()).upper()

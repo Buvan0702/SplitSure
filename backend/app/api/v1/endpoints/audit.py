@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.user import AuditLog, GroupMember, User
+from app.models.user import AuditLog, GroupMember, User, AuditEventType
 from app.schemas.schemas import AuditLogOut
 
 router = APIRouter(prefix="/groups/{group_id}/audit", tags=["audit"])

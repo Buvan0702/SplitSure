@@ -5,52 +5,52 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 export { SCREEN_WIDTH, SCREEN_HEIGHT };
 
 export const Colors = {
-  // Brand
-  primary: '#6C63FF',
-  primaryLight: '#EEF0FF',
-  primaryDark: '#4A42CC',
-
-  // Semantic
-  success: '#00C897',
-  successLight: '#E6FBF5',
-  danger: '#FF6B6B',
-  dangerLight: '#FFF0F0',
-  warning: '#FFD93D',
-  warningLight: '#FFFAE6',
-
-  // Neutral
-  background: '#F8F9FF',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F2F3FA',
-  border: '#E8E9F5',
-  borderStrong: '#C8CADF',
-
-  // Text
-  textPrimary: '#1A1A2E',
-  textSecondary: '#5A5B75',
-  textTertiary: '#9899B3',
-  textInverse: '#FFFFFF',
-
-  // Overlay
-  overlay: 'rgba(26, 26, 46, 0.5)',
+  background: '#0B0E17',
+  surface: '#10131D',
+  surfaceHigh: '#161924',
+  surfaceHighest: '#212533',
+  surfaceLowest: '#05070D',
+  surfaceAlt: '#161924',
+  glass: 'rgba(33, 37, 51, 0.78)',
+  glassSoft: 'rgba(16, 19, 29, 0.72)',
+  ghostBorder: 'rgba(255,255,255,0.08)',
+  ghostBorderStrong: 'rgba(163,166,255,0.28)',
+  border: 'rgba(255,255,255,0.08)',
+  primary: '#A3A6FF',
+  primaryDim: '#6063EE',
+  primaryContainer: '#9396FF',
+  primaryLight: 'rgba(163,166,255,0.12)',
+  primaryInk: '#0A0081',
+  secondary: '#1DFBA5',
+  secondaryDim: '#00EC9A',
+  tertiary: '#9BDDFF',
+  success: '#1DFBA5',
+  successLight: 'rgba(29,251,165,0.12)',
+  warning: '#F59E0B',
+  warningLight: 'rgba(245,158,11,0.12)',
+  danger: '#FF6E84',
+  dangerLight: 'rgba(255,110,132,0.12)',
+  textPrimary: '#E9EAF8',
+  textSecondary: '#A8AAB7',
+  textMuted: '#727581',
+  textTertiary: '#727581',
+  textInverse: '#000000',
+  overlay: 'rgba(6, 8, 14, 0.76)',
+  chip: 'rgba(255,255,255,0.05)',
 } as const;
 
 export const Typography = {
-  // Font families (use system fonts; swap with custom in production)
-  fontBold: 'System',
-  fontSemiBold: 'System',
-  fontMedium: 'System',
-  fontRegular: 'System',
-
-  // Scale
-  xs: 11,
-  sm: 13,
-  base: 15,
-  md: 17,
+  display: 'Space Grotesk',
+  body: 'Inter',
+  mono: 'JetBrains Mono',
+  xs: 10,
+  sm: 12,
+  base: 14,
+  md: 16,
   lg: 20,
   xl: 24,
-  xxl: 30,
-  xxxl: 38,
+  xxl: 32,
+  xxxl: 52,
 } as const;
 
 export const Spacing = {
@@ -62,36 +62,59 @@ export const Spacing = {
   xl: 24,
   xxl: 32,
   xxxl: 48,
+  mega: 64,
 } as const;
 
 export const Radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
+  sm: 10,
+  md: 16,
+  lg: 20,
   xl: 24,
+  xxl: 32,
   full: 999,
 } as const;
 
 export const Shadow = {
   sm: {
-    shadowColor: '#6C63FF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowColor: Colors.primaryDim,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 6,
   },
   md: {
-    shadowColor: '#6C63FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowColor: Colors.primaryDim,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.24,
+    shadowRadius: 32,
+    elevation: 10,
   },
   lg: {
-    shadowColor: '#1A1A2E',
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 40,
+    elevation: 12,
+  },
+  glowSm: {
+    shadowColor: Colors.primaryDim,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  glowMd: {
+    shadowColor: Colors.primaryDim,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.24,
+    shadowRadius: 32,
+    elevation: 10,
+  },
+  glowLg: {
+    shadowColor: Colors.secondary,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 40,
+    elevation: 12,
   },
 } as const;

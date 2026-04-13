@@ -85,16 +85,19 @@ async def create_group(
 
 @router.get("", response_model=list[GroupOut])
 async def list_my_groups(
+    include_archived: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
+    query = (
         select(Group)
         .join(GroupMember, GroupMember.group_id == Group.id)
         .where(GroupMember.user_id == current_user.id)
-        .where(Group.is_archived == False)
         .options(selectinload(Group.members).selectinload(GroupMember.user))
     )
+    if not include_archived:
+        query = query.where(Group.is_archived == False)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -154,7 +157,11 @@ async def add_member(
     result = await db.execute(select(User).where(User.phone == body.phone))
     new_user = result.scalar_one_or_none()
     if not new_user:
-        raise HTTPException(404, "User with this phone number not found")
+        if not settings.USE_DEV_OTP:
+            raise HTTPException(404, "User with this phone number not found")
+        new_user = User(phone=body.phone)
+        db.add(new_user)
+        await db.flush()
 
     existing = await _get_member(db, group_id, new_user.id)
     if existing:
@@ -279,3 +286,23 @@ async def archive_group(
     group = await _load_group(db, group_id)
     group.is_archived = True
     await db.commit()
+
+
+@router.post("/{group_id}/unarchive", response_model=GroupOut)
+async def unarchive_group(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _require_admin(db, group_id, current_user.id)
+    result = await db.execute(
+        select(Group)
+        .options(selectinload(Group.members).selectinload(GroupMember.user))
+        .where(Group.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(404, "Group not found")
+    group.is_archived = False
+    await db.commit()
+    return group

@@ -1,8 +1,20 @@
 import axios, { AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import type { ExpenseCategory, SplitType } from '../types';
 
-const RAW_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const DEFAULT_DEV_API_URL = 'https://splitsure.onrender.com/api/v1';
+const DEFAULT_PROD_API_URL = 'https://splitsure.onrender.com/api/v1';
+const API_TIMEOUT_MS = 60000;
+const AUTH_TIMEOUT_MS = 90000;
+
+function normalizeBaseUrl(baseUrl: string) {
+  return baseUrl.trim().replace(/\/+$/, '');
+}
+
+const RAW_BASE_URL = normalizeBaseUrl(
+  process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? DEFAULT_DEV_API_URL : DEFAULT_PROD_API_URL)
+);
 
 function resolveBaseUrl(baseUrl: string) {
   if (Platform.OS !== 'android') return baseUrl;
@@ -14,12 +26,42 @@ function resolveBaseUrl(baseUrl: string) {
 }
 
 const BASE_URL = resolveBaseUrl(RAW_BASE_URL);
+const API_ROOT_URL = BASE_URL.replace(/\/api\/v1\/?$/, '');
+const HEALTHCHECK_URL = `${API_ROOT_URL}/health`;
 
 export const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000,
+  timeout: API_TIMEOUT_MS,
   headers: { 'Content-Type': 'application/json' },
 });
+
+let backendWakePromise: Promise<void> | null = null;
+let authFailureHandler: (() => void) | null = null;
+
+export function registerAuthFailureHandler(handler: (() => void) | null) {
+  authFailureHandler = handler;
+}
+
+function isTransientNetworkError(error: unknown) {
+  const axiosError = error as AxiosError;
+  return axiosError.code === 'ECONNABORTED' || axiosError.message === 'Network Error';
+}
+
+async function ensureBackendAwake() {
+  if (backendWakePromise) {
+    await backendWakePromise;
+    return;
+  }
+
+  backendWakePromise = axios
+    .get(HEALTHCHECK_URL, { timeout: AUTH_TIMEOUT_MS })
+    .then(() => undefined)
+    .finally(() => {
+      backendWakePromise = null;
+    });
+
+  await backendWakePromise;
+}
 
 // ── Request interceptor: attach access token ──────────────────────────────
 api.interceptors.request.use(async (config) => {
@@ -77,7 +119,7 @@ api.interceptors.response.use(
         processQueue(err as AxiosError, null);
         await SecureStore.deleteItemAsync('access_token');
         await SecureStore.deleteItemAsync('refresh_token');
-        // Trigger logout in store
+        authFailureHandler?.();
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
@@ -89,9 +131,28 @@ api.interceptors.response.use(
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 export const authAPI = {
-  sendOTP: (phone: string) => api.post('/auth/send-otp', { phone }),
-  verifyOTP: (phone: string, otp: string) =>
-    api.post('/auth/verify-otp', { phone, otp }),
+  sendOTP: async (phone: string) => {
+    try {
+      await ensureBackendAwake();
+    } catch {}
+
+    try {
+      return await api.post('/auth/send-otp', { phone }, { timeout: AUTH_TIMEOUT_MS });
+    } catch (error) {
+      if (!isTransientNetworkError(error)) throw error;
+      await ensureBackendAwake();
+      return api.post('/auth/send-otp', { phone }, { timeout: AUTH_TIMEOUT_MS });
+    }
+  },
+  verifyOTP: async (phone: string, otp: string) => {
+    try {
+      return await api.post('/auth/verify-otp', { phone, otp }, { timeout: AUTH_TIMEOUT_MS });
+    } catch (error) {
+      if (!isTransientNetworkError(error)) throw error;
+      await ensureBackendAwake();
+      return api.post('/auth/verify-otp', { phone, otp }, { timeout: AUTH_TIMEOUT_MS });
+    }
+  },
   refresh: (refresh_token: string) =>
     api.post('/auth/refresh', { refresh_token }),
   logout: () => api.post('/auth/logout'),
@@ -127,9 +188,28 @@ export const expensesAPI = {
     api.get(`/groups/${groupId}/expenses`, { params }),
   get: (groupId: number, id: number) =>
     api.get(`/groups/${groupId}/expenses/${id}`),
-  create: (groupId: number, data: any) =>
+  create: (
+    groupId: number,
+    data: {
+      amount: number;
+      description: string;
+      category: ExpenseCategory;
+      split_type: SplitType;
+      splits: Array<{ user_id: number; amount?: number; percentage?: number }>;
+    }
+  ) =>
     api.post(`/groups/${groupId}/expenses`, data),
-  update: (groupId: number, id: number, data: any) =>
+  update: (
+    groupId: number,
+    id: number,
+    data: {
+      amount?: number;
+      description?: string;
+      category?: ExpenseCategory;
+      split_type?: SplitType;
+      splits?: Array<{ user_id: number; amount?: number; percentage?: number }>;
+    }
+  ) =>
     api.patch(`/groups/${groupId}/expenses/${id}`, data),
   delete: (groupId: number, id: number) =>
     api.delete(`/groups/${groupId}/expenses/${id}`),
@@ -167,5 +247,5 @@ export const auditAPI = {
 // ── Reports ───────────────────────────────────────────────────────────────
 export const reportsAPI = {
   generate: (groupId: number) =>
-    api.get(`/groups/${groupId}/report`, { responseType: 'blob' }),
+    api.get(`/groups/${groupId}/report`, { responseType: 'arraybuffer' }),
 };

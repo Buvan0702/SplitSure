@@ -27,42 +27,21 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <StatusBar style="dark" />
+          <StatusBar style="light" />
           <Stack
             screenOptions={{
-              headerStyle: { backgroundColor: Colors.surface },
-              headerTintColor: Colors.textPrimary,
-              headerTitleStyle: { fontWeight: '800', fontSize: 17 },
-              headerShadowVisible: false,
+              headerShown: false,
               contentStyle: { backgroundColor: Colors.background },
             }}
           >
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="group/[id]"
-              options={{ title: 'Group', headerBackTitle: 'Groups' }}
-            />
-            <Stack.Screen
-              name="expense/[id]"
-              options={{ title: 'Expense Detail', headerBackTitle: 'Back' }}
-            />
-            <Stack.Screen
-              name="add-expense"
-              options={{ title: 'Add Expense', presentation: 'modal' }}
-            />
-            <Stack.Screen
-              name="balances"
-              options={{ title: 'Balances', headerBackTitle: 'Group' }}
-            />
-            <Stack.Screen
-              name="settlements"
-              options={{ title: 'Settlements', headerBackTitle: 'Group' }}
-            />
-            <Stack.Screen
-              name="audit"
-              options={{ title: 'Audit Trail', headerBackTitle: 'Group' }}
-            />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="login" />
+            <Stack.Screen name="group/[id]" />
+            <Stack.Screen name="expense/[id]" />
+            <Stack.Screen name="add-expense" />
+            <Stack.Screen name="balances" />
+            <Stack.Screen name="settlements" />
+            <Stack.Screen name="audit" />
           </Stack>
           <Toast />
         </QueryClientProvider>

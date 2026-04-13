@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     # OTP
     # Dev mode returns OTP in the API response instead of sending SMS.
+    MSG91_AUTH_KEY: str = ""
+    MSG91_TEMPLATE_ID: str = ""
     USE_DEV_OTP: bool = True
     OTP_EXPIRE_MINUTES: int = 10
     OTP_MAX_REQUESTS_PER_HOUR: int = 20
@@ -47,9 +49,7 @@ class Settings(BaseSettings):
     INVITE_LINK_EXPIRE_HOURS: int = 72
     INVITE_LINK_MAX_USES: int = 10
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 
 settings = Settings()

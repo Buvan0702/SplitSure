@@ -1,276 +1,66 @@
-import React, { useState } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, RefreshControl,
-  TouchableOpacity, Alert, Modal, KeyboardAvoidingView, Platform,
-} from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { settlementsAPI } from '../services/api';
-import { Settlement, SettlementStatus } from '../types';
-import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
-import { Card, Avatar, Badge, Button, Input, EmptyState } from '../components/ui';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MaterialIcons } from '@expo/vector-icons';
+import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
+import { Avatar, Button, Card, Input } from '../components/ui';
+import { groupsAPI, reportsAPI, settlementsAPI } from '../services/api';
+import { Group, GroupBalances, Settlement } from '../types';
+import { Colors, Radius, Spacing, Typography } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
-import { format, formatDistanceToNow } from 'date-fns';
 
-const STATUS_CONFIG: Record<SettlementStatus, { label: string; color: string; bg: string; icon: string }> = {
-  pending:   { label: 'Pending',   color: Colors.warning,  bg: Colors.warningLight,  icon: '⏳' },
-  confirmed: { label: 'Confirmed', color: Colors.success,  bg: Colors.successLight,  icon: '✅' },
-  disputed:  { label: 'Disputed',  color: Colors.danger,   bg: Colors.dangerLight,   icon: '⚠️' },
-};
+const upiApps = [
+  { name: 'GPay', icon: 'G', color: '#1A73E8', scheme: 'gpay://' },
+  { name: 'PhonePe', icon: 'P', color: '#5F259F', scheme: 'phonepe://' },
+  { name: 'Paytm', icon: 'Y', color: '#00BAF2', scheme: 'paytmmp://' },
+];
 
-function SettlementCard({
-  settlement,
-  currentUserId,
-  isAdmin,
-  groupId,
-}: {
-  settlement: Settlement;
-  currentUserId: number;
-  isAdmin: boolean;
-  groupId: number;
-}) {
-  const queryClient = useQueryClient();
-  const [showDisputeModal, setShowDisputeModal] = useState(false);
-  const [showResolveModal, setShowResolveModal] = useState(false);
-  const [disputeNote, setDisputeNote] = useState('');
-  const [resolveNote, setResolveNote] = useState('');
-  const [noteError, setNoteError] = useState('');
+function toBase64(bytes: Uint8Array) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i] ?? 0;
+    const b = bytes[i + 1] ?? 0;
+    const c = bytes[i + 2] ?? 0;
+    const triple = (a << 16) | (b << 8) | c;
+    result += chars[(triple >> 18) & 63];
+    result += chars[(triple >> 12) & 63];
+    result += i + 1 < bytes.length ? chars[(triple >> 6) & 63] : '=';
+    result += i + 2 < bytes.length ? chars[triple & 63] : '=';
+  }
+  return result;
+}
 
-  const isReceiver = settlement.receiver.id === currentUserId;
-  const isPayer = settlement.payer.id === currentUserId;
-  const isPending = settlement.status === 'pending';
-  const isDisputed = settlement.status === 'disputed';
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
+}
 
-  const sc = STATUS_CONFIG[settlement.status];
-  const amountRs = (settlement.amount / 100).toFixed(2);
-
-  const confirmMutation = useMutation({
-    mutationFn: () => settlementsAPI.confirm(groupId, settlement.id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settlements', String(groupId)] });
-      queryClient.invalidateQueries({ queryKey: ['balances', String(groupId)] });
-      Alert.alert('✅ Confirmed!', 'Payment confirmed. Balance updated.');
-    },
-    onError: (e: any) => Alert.alert('Error', e?.response?.data?.detail || 'Failed to confirm'),
-  });
-
-  const disputeMutation = useMutation({
-    mutationFn: () => settlementsAPI.dispute(groupId, settlement.id, disputeNote),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settlements', String(groupId)] });
-      setShowDisputeModal(false);
-    },
-    onError: (e: any) => setNoteError(e?.response?.data?.detail || 'Failed to dispute'),
-  });
-
-  const resolveMutation = useMutation({
-    mutationFn: () => settlementsAPI.resolve(groupId, settlement.id, resolveNote),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settlements', String(groupId)] });
-      queryClient.invalidateQueries({ queryKey: ['balances', String(groupId)] });
-      setShowResolveModal(false);
-      Alert.alert('✅ Dispute Resolved', 'The settlement has been confirmed.');
-    },
-    onError: (e: any) => setNoteError(e?.response?.data?.detail || 'Failed to resolve'),
-  });
-
-  return (
-    <>
-      <Card style={[styles.card, isPending && isReceiver && styles.cardHighlight]}>
-        {/* Header row */}
-        <View style={styles.cardHeader}>
-          <View style={[styles.statusDot, { backgroundColor: sc.bg }]}>
-            <Text style={styles.statusIcon}>{sc.icon}</Text>
-          </View>
-          <View style={styles.cardMeta}>
-            <Text style={styles.cardTime}>
-              {formatDistanceToNow(new Date(settlement.created_at), { addSuffix: true })}
-            </Text>
-            <Badge label={sc.label} color={sc.color} bgColor={sc.bg} />
-          </View>
-        </View>
-
-        {/* Transfer row */}
-        <View style={styles.transferRow}>
-          <View style={styles.person}>
-            <Avatar name={settlement.payer.name || settlement.payer.phone} size={40} />
-            <Text style={styles.personName} numberOfLines={1}>
-              {settlement.payer.id === currentUserId ? 'You' : (settlement.payer.name || settlement.payer.phone)}
-            </Text>
-            <Text style={styles.personRole}>payer</Text>
-          </View>
-
-          <View style={styles.amountCenter}>
-            <Text style={styles.transferArrow}>→</Text>
-            <Text style={styles.transferAmount}>₹{amountRs}</Text>
-          </View>
-
-          <View style={styles.person}>
-            <Avatar name={settlement.receiver.name || settlement.receiver.phone} size={40} />
-            <Text style={styles.personName} numberOfLines={1}>
-              {settlement.receiver.id === currentUserId ? 'You' : (settlement.receiver.name || settlement.receiver.phone)}
-            </Text>
-            <Text style={styles.personRole}>receiver</Text>
-          </View>
-        </View>
-
-        {/* Dispute note */}
-        {settlement.dispute_note && (
-          <View style={styles.noteBox}>
-            <Text style={styles.noteLabel}>Dispute reason:</Text>
-            <Text style={styles.noteText}>{settlement.dispute_note}</Text>
-          </View>
-        )}
-
-        {/* Resolution note */}
-        {settlement.resolution_note && (
-          <View style={[styles.noteBox, { borderLeftColor: Colors.success }]}>
-            <Text style={[styles.noteLabel, { color: Colors.success }]}>Resolution:</Text>
-            <Text style={styles.noteText}>{settlement.resolution_note}</Text>
-          </View>
-        )}
-
-        {/* Confirmed at */}
-        {settlement.confirmed_at && (
-          <Text style={styles.confirmedAt}>
-            ✅ Confirmed {format(new Date(settlement.confirmed_at), 'dd MMM yyyy, HH:mm')}
-          </Text>
-        )}
-
-        {/* Actions for receiver when pending */}
-        {isPending && isReceiver && (
-          <View style={styles.actionRow}>
-            <Button
-              title="✅ Confirm Received"
-              onPress={() => Alert.alert(
-                'Confirm Payment',
-                `Confirm that you received ₹${amountRs} from ${settlement.payer.name || settlement.payer.phone}?`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Yes, Confirm', onPress: () => confirmMutation.mutate() },
-                ]
-              )}
-              loading={confirmMutation.isPending}
-              size="sm"
-              style={{ flex: 1, marginRight: Spacing.sm }}
-            />
-            <Button
-              title="⚠️ Dispute"
-              onPress={() => { setNoteError(''); setShowDisputeModal(true); }}
-              variant="secondary"
-              size="sm"
-              style={{ flex: 1, borderColor: Colors.danger }}
-            />
-          </View>
-        )}
-
-        {/* Admin can resolve disputed settlements */}
-        {isDisputed && isAdmin && (
-          <Button
-            title="🤝 Resolve Dispute"
-            onPress={() => { setNoteError(''); setShowResolveModal(true); }}
-            variant="secondary"
-            size="sm"
-            style={{ marginTop: Spacing.sm }}
-          />
-        )}
-
-        {/* Payer waiting message */}
-        {isPending && isPayer && (
-          <View style={styles.waitingBox}>
-            <Text style={styles.waitingText}>
-              ⏳ Waiting for {settlement.receiver.name || settlement.receiver.phone} to confirm...
-            </Text>
-          </View>
-        )}
-      </Card>
-
-      {/* Dispute modal */}
-      <Modal visible={showDisputeModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={[styles.modalCard, Shadow.lg]}>
-              <Text style={styles.modalTitle}>Dispute This Payment</Text>
-              <Text style={styles.modalSub}>
-                You're claiming you did NOT receive ₹{amountRs} from{' '}
-                <Text style={{ fontWeight: '700' }}>{settlement.payer.name || settlement.payer.phone}</Text>.
-              </Text>
-              <Input
-                label="Reason *"
-                value={disputeNote}
-                onChangeText={v => { setDisputeNote(v); setNoteError(''); }}
-                placeholder="Explain why you're disputing this payment..."
-                multiline
-                numberOfLines={3}
-                style={{ height: 80, textAlignVertical: 'top', paddingTop: Spacing.sm }}
-                error={noteError}
-                autoFocus
-              />
-              <View style={styles.modalActions}>
-                <Button title="Cancel" onPress={() => setShowDisputeModal(false)} variant="ghost" style={{ flex: 1, marginRight: Spacing.sm }} />
-                <Button
-                  title="Submit Dispute"
-                  onPress={() => {
-                    if (disputeNote.trim().length < 10) { setNoteError('Min 10 characters required'); return; }
-                    disputeMutation.mutate();
-                  }}
-                  loading={disputeMutation.isPending}
-                  variant="danger"
-                  style={{ flex: 1.5 }}
-                />
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Resolve modal */}
-      <Modal visible={showResolveModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={[styles.modalCard, Shadow.lg]}>
-              <Text style={styles.modalTitle}>Resolve Dispute</Text>
-              <Text style={styles.modalSub}>As admin, you're confirming this payment is valid. Add a resolution note.</Text>
-              <Input
-                label="Resolution Note *"
-                value={resolveNote}
-                onChangeText={v => { setResolveNote(v); setNoteError(''); }}
-                placeholder="e.g., Confirmed via bank statement screenshot..."
-                multiline
-                numberOfLines={3}
-                style={{ height: 80, textAlignVertical: 'top', paddingTop: Spacing.sm }}
-                error={noteError}
-                autoFocus
-              />
-              <View style={styles.modalActions}>
-                <Button title="Cancel" onPress={() => setShowResolveModal(false)} variant="ghost" style={{ flex: 1, marginRight: Spacing.sm }} />
-                <Button
-                  title="Resolve & Confirm"
-                  onPress={() => {
-                    if (resolveNote.trim().length < 5) { setNoteError('Please provide a resolution note'); return; }
-                    resolveMutation.mutate();
-                  }}
-                  loading={resolveMutation.isPending}
-                  style={{ flex: 1.5 }}
-                />
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-    </>
-  );
+function buildUpiIntent(baseLink: string, appScheme: string) {
+  return baseLink.replace(/^upi:\/\//, appScheme);
 }
 
 export default function SettlementsScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const [filter, setFilter] = useState<SettlementStatus | 'all'>('all');
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [selectedSettlement, setSelectedSettlement] = useState<Settlement | null>(null);
+  const [note, setNote] = useState('');
+  const [noteError, setNoteError] = useState('');
 
-  // Need to know if user is admin
-  const [isAdmin] = useState(false); // Would pull from group query in real impl
+  const balancesQuery = useQuery({
+    queryKey: ['balances', groupId],
+    queryFn: async () => {
+      const { data } = await settlementsAPI.getBalances(Number(groupId));
+      return data as GroupBalances;
+    },
+  });
 
-  const { data: settlements, isLoading, refetch } = useQuery({
+  const settlementsQuery = useQuery({
     queryKey: ['settlements', groupId],
     queryFn: async () => {
       const { data } = await settlementsAPI.list(Number(groupId));
@@ -278,138 +68,519 @@ export default function SettlementsScreen() {
     },
   });
 
-  const filtered = settlements?.filter(s =>
-    filter === 'all' || s.status === filter
-  ) ?? [];
+  const groupQuery = useQuery({
+    queryKey: ['group', groupId],
+    queryFn: async () => {
+      const { data } = await groupsAPI.get(Number(groupId));
+      return data as Group;
+    },
+  });
 
-  const pendingCount = settlements?.filter(s => s.status === 'pending').length ?? 0;
-  const pendingForMe = settlements?.filter(
-    s => s.status === 'pending' && s.receiver.id === user?.id
-  ).length ?? 0;
+  const refreshQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
+    queryClient.invalidateQueries({ queryKey: ['settlements', groupId] });
+    queryClient.invalidateQueries({ queryKey: ['audit', groupId] });
+    queryClient.invalidateQueries({ queryKey: ['home-balances'] });
+  };
+
+  const initiateSettlement = useMutation({
+    mutationFn: (payload: { receiver_id: number; amount: number }) => settlementsAPI.initiate(Number(groupId), payload),
+    onSuccess: () => {
+      refreshQueries();
+      Alert.alert('Settlement initiated');
+    },
+    onError: (error: any) => Alert.alert(error?.response?.data?.detail || 'Failed to initiate settlement'),
+  });
+
+  const confirmSettlement = useMutation({
+    mutationFn: (settlementId: number) => settlementsAPI.confirm(Number(groupId), settlementId),
+    onSuccess: () => {
+      refreshQueries();
+      Alert.alert('Settlement confirmed');
+    },
+    onError: (error: any) => Alert.alert(error?.response?.data?.detail || 'Failed to confirm settlement'),
+  });
+
+  const disputeSettlement = useMutation({
+    mutationFn: ({ settlementId, value }: { settlementId: number; value: string }) => settlementsAPI.dispute(Number(groupId), settlementId, value),
+    onSuccess: () => {
+      refreshQueries();
+      setShowDisputeModal(false);
+      setSelectedSettlement(null);
+      setNote('');
+      setNoteError('');
+      Alert.alert('Settlement disputed');
+    },
+    onError: (error: any) => setNoteError(error?.response?.data?.detail || 'Failed to dispute settlement'),
+  });
+
+  const resolveSettlement = useMutation({
+    mutationFn: ({ settlementId, value }: { settlementId: number; value: string }) => settlementsAPI.resolve(Number(groupId), settlementId, value),
+    onSuccess: () => {
+      refreshQueries();
+      setShowResolveModal(false);
+      setSelectedSettlement(null);
+      setNote('');
+      setNoteError('');
+      Alert.alert('Dispute resolved');
+    },
+    onError: (error: any) => setNoteError(error?.response?.data?.detail || 'Failed to resolve dispute'),
+  });
+
+  const generateReport = useMutation({
+    mutationFn: () => reportsAPI.generate(Number(groupId)),
+    onSuccess: async ({ data, headers }) => {
+      try {
+        const bytes = new Uint8Array(data as ArrayBuffer);
+        const base64 = toBase64(bytes);
+        const disposition = String(headers?.['content-disposition'] || '');
+        const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+        const fileName = sanitizeFileName(match?.[1] || `splitsure-report-${groupId}.pdf`);
+        const fileUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, { mimeType: 'application/pdf' });
+        } else {
+          Alert.alert('Report ready', `Saved to ${fileUri}`);
+        }
+      } catch {
+        Alert.alert('Failed to save report');
+      }
+    },
+    onError: (error: any) => Alert.alert(error?.response?.data?.detail || 'Failed to generate report'),
+  });
+
+  const isAdmin = (groupQuery.data?.members || []).some((member) => member.user.id === user?.id && member.role === 'admin');
+  const myInstructions = (balancesQuery.data?.optimized_settlements || []).filter((item) => item.payer_id === user?.id);
+  const netSettlement = myInstructions.reduce((sum, item) => sum + item.amount, 0);
+
+  const openDisputeModal = (settlement: Settlement) => {
+    setSelectedSettlement(settlement);
+    setNote('');
+    setNoteError('');
+    setShowDisputeModal(true);
+  };
+
+  const openResolveModal = (settlement: Settlement) => {
+    setSelectedSettlement(settlement);
+    setNote('');
+    setNoteError('');
+    setShowResolveModal(true);
+  };
+
+  const settlementCards = useMemo(() => settlementsQuery.data || [], [settlementsQuery.data]);
 
   return (
-    <View style={styles.container}>
-      {/* Pending alert banner */}
-      {pendingForMe > 0 && (
-        <TouchableOpacity
-          style={styles.alertBanner}
-          onPress={() => setFilter('pending')}
-        >
-          <Text style={styles.alertBannerText}>
-            🔔 {pendingForMe} payment{pendingForMe > 1 ? 's' : ''} waiting for your confirmation
-          </Text>
-          <Text style={styles.alertBannerAction}>Review →</Text>
-        </TouchableOpacity>
-      )}
+    <AppBackdrop>
+      <TopBar title="SETTLE UP" subtitle="Optimized payment matrix" userName={user?.name || user?.phone} />
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.headerRow}>
+          <View style={styles.savedChip}>
+            <MaterialIcons color={Colors.primary} name="bolt" size={14} />
+            <Text style={styles.savedChipText}>{myInstructions.length} TXNS SAVED</Text>
+          </View>
+          <View>
+            <Text style={styles.headerLabel}>Net Settlement</Text>
+            <Text style={styles.headerAmount}>₹{(netSettlement / 100).toFixed(2)}</Text>
+          </View>
+        </View>
 
-      {/* Summary row */}
-      <View style={styles.summaryRow}>
-        {(['all', 'pending', 'confirmed', 'disputed'] as const).map(f => {
-          const count = f === 'all' ? (settlements?.length ?? 0) :
-                        settlements?.filter(s => s.status === f).length ?? 0;
-          const sc = f === 'all' ? { color: Colors.primary, bg: Colors.primaryLight } : STATUS_CONFIG[f];
-          return (
-            <TouchableOpacity
-              key={f}
-              onPress={() => setFilter(f)}
-              style={[styles.filterChip, filter === f && { backgroundColor: sc.color }]}
+        <Card style={styles.matrixCard}>
+          <Text style={styles.panelTitle}>Pending Optimized Transfers</Text>
+          <Text style={styles.panelCopy}>These are the minimum payments needed after confirmed settlements are applied.</Text>
+          {(balancesQuery.data?.optimized_settlements || []).length ? (
+            (balancesQuery.data?.optimized_settlements || []).slice(0, 4).map((instruction, index) => (
+              <View key={`${instruction.payer_id}-${instruction.receiver_id}-${index}`} style={styles.inlineTransfer}>
+                <Text style={styles.inlineTransferText}>{instruction.payer_name}</Text>
+                <Text style={styles.inlineTransferAmount}>₹{(instruction.amount / 100).toFixed(0)}</Text>
+                <Text style={styles.inlineTransferText}>{instruction.receiver_name}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.emptyCopy}>No optimized settlements pending.</Text>
+          )}
+        </Card>
+
+        <View style={styles.upiRow}>
+          {upiApps.map((app) => (
+            <Pressable
+              key={app.name}
+              onPress={async () => {
+                const link = myInstructions[0]?.upi_deep_link;
+                if (!link) {
+                  Alert.alert('No UPI deep link available');
+                  return;
+                }
+                const appLink = buildUpiIntent(link, app.scheme);
+                const fallbackLink = link;
+                try {
+                  if (await Linking.canOpenURL(appLink)) {
+                    await Linking.openURL(appLink);
+                    return;
+                  }
+                  if (await Linking.canOpenURL(fallbackLink)) {
+                    await Linking.openURL(fallbackLink);
+                    return;
+                  }
+                  Alert.alert(`${app.name} unavailable`, 'No compatible UPI app was found on this device.');
+                } catch {
+                  Alert.alert(`Unable to open ${app.name}`);
+                }
+              }}
             >
-              <Text style={[styles.filterCount, filter === f && { color: Colors.textInverse }]}>{count}</Text>
-              <Text style={[styles.filterLabel, filter === f && { color: Colors.textInverse }]}>
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+              <Card style={styles.upiCard}>
+                <View style={[styles.upiIcon, { backgroundColor: `${app.color}22` }]}>
+                  <Text style={[styles.upiIconText, { color: app.color }]}>{app.icon}</Text>
+                </View>
+                <Text style={styles.upiName}>{app.name}</Text>
+              </Card>
+            </Pressable>
+          ))}
+        </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={s => String(s.id)}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <SettlementCard
-            settlement={item}
-            currentUserId={user?.id ?? 0}
-            isAdmin={isAdmin}
-            groupId={Number(groupId)}
+        <Card style={styles.reportCard}>
+          <View style={styles.reportLeft}>
+            <View style={styles.reportIconWrap}>
+              <MaterialIcons color={Colors.primaryInk} name="workspace-premium" size={24} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.reportTitle}>Generate Proof Report</Text>
+              <Text style={styles.reportCopy}>Creates a shareable PDF in dev mode and opens the system share sheet.</Text>
+            </View>
+          </View>
+          <Button title="EXPORT PDF" onPress={() => generateReport.mutate()} loading={generateReport.isPending} />
+        </Card>
+
+        {myInstructions.map((item, index) => (
+          <Button
+            key={`${item.receiver_id}-${index}`}
+            title={`MARK ₹${(item.amount / 100).toFixed(0)} PAID TO ${item.receiver_name.toUpperCase()}`}
+            onPress={() => initiateSettlement.mutate({ receiver_id: item.receiver_id, amount: item.amount })}
+            loading={initiateSettlement.isPending}
+            style={{ marginTop: index === 0 ? 0 : Spacing.sm }}
           />
-        )}
-        ListEmptyComponent={
-          isLoading ? null : (
-            <EmptyState
-              icon="💸"
-              title={filter === 'all' ? 'No settlements yet' : `No ${filter} settlements`}
-              subtitle="Settlements appear here once someone marks a payment as made"
+        ))}
+
+        <View style={styles.section}>
+          {settlementCards.map((settlement) => {
+            const pending = settlement.status === 'pending';
+            const disputed = settlement.status === 'disputed';
+            const canConfirm = pending && settlement.receiver.id === user?.id;
+            const canDispute = pending && settlement.receiver.id === user?.id;
+            const canResolve = disputed && isAdmin;
+
+            return (
+              <Card key={settlement.id} style={[styles.transactionCard, pending && styles.transactionPending, disputed && styles.transactionDisputed]}>
+                <View style={styles.transactionTop}>
+                  <Text style={[styles.transactionCode, disputed && { color: Colors.danger }]}>TRANSACTION #{String(settlement.id).padStart(3, '0')}</Text>
+                  <Text style={[styles.transactionStatus, disputed ? { color: Colors.danger } : pending ? { color: Colors.warning } : { color: Colors.secondary }]}>
+                    {settlement.status.toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.transactionFlow}>
+                  <Text style={styles.transactionName}>{settlement.payer.name || settlement.payer.phone}</Text>
+                  <Text style={[styles.transactionAmount, disputed && { color: Colors.danger }]}>₹{(settlement.amount / 100).toFixed(0)}</Text>
+                  <Text style={styles.transactionName}>{settlement.receiver.name || settlement.receiver.phone}</Text>
+                </View>
+                {settlement.dispute_note ? <Text style={styles.transactionNote}>{settlement.dispute_note}</Text> : null}
+                {settlement.resolution_note ? <Text style={styles.transactionNote}>Resolved: {settlement.resolution_note}</Text> : null}
+                {(canConfirm || canDispute || canResolve) ? (
+                  <View style={styles.transactionActions}>
+                    {canConfirm ? (
+                      <Button title="Confirm" onPress={() => confirmSettlement.mutate(settlement.id)} loading={confirmSettlement.isPending} style={{ flex: 1 }} size="sm" />
+                    ) : null}
+                    {canDispute ? (
+                      <Button title="Dispute" onPress={() => openDisputeModal(settlement)} variant="danger" style={{ flex: 1 }} size="sm" />
+                    ) : null}
+                    {canResolve ? (
+                      <Button title="Resolve" onPress={() => openResolveModal(settlement)} variant="secondary" style={{ flex: 1 }} size="sm" />
+                    ) : null}
+                  </View>
+                ) : null}
+              </Card>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      <FloatingDock current="groups" />
+
+      <Modal visible={showDisputeModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <Card style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Dispute Settlement</Text>
+            <Text style={styles.modalSub}>Explain why this payment cannot be confirmed.</Text>
+            <Input
+              label="Dispute Note"
+              value={note}
+              onChangeText={(value) => {
+                setNote(value);
+                setNoteError('');
+              }}
+              error={noteError}
+              placeholder="Enter dispute note"
+              multiline
             />
-          )
-        }
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.primary} />
-        }
-      />
-    </View>
+            <View style={styles.modalActions}>
+              <Button title="Cancel" onPress={() => setShowDisputeModal(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button
+                title="Submit"
+                onPress={() => {
+                  if (!selectedSettlement) return;
+                  disputeSettlement.mutate({ settlementId: selectedSettlement.id, value: note });
+                }}
+                style={{ flex: 1.2 }}
+                loading={disputeSettlement.isPending}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
+
+      <Modal visible={showResolveModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <Card style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Resolve Dispute</Text>
+            <Text style={styles.modalSub}>Add a short admin note before resolving this disputed payment.</Text>
+            <Input
+              label="Resolution Note"
+              value={note}
+              onChangeText={(value) => {
+                setNote(value);
+                setNoteError('');
+              }}
+              error={noteError}
+              placeholder="Enter resolution note"
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <Button title="Cancel" onPress={() => setShowResolveModal(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button
+                title="Resolve"
+                onPress={() => {
+                  if (!selectedSettlement) return;
+                  resolveSettlement.mutate({ settlementId: selectedSettlement.id, value: note });
+                }}
+                style={{ flex: 1.2 }}
+                loading={resolveSettlement.isPending}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
+    </AppBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-
-  alertBanner: {
-    backgroundColor: Colors.warning, flexDirection: 'row',
-    alignItems: 'center', padding: Spacing.md, paddingHorizontal: Spacing.base,
+  scroll: {
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.base,
+    paddingBottom: 170,
   },
-  alertBannerText: { flex: 1, fontSize: Typography.sm, fontWeight: '700', color: Colors.textPrimary },
-  alertBannerAction: { fontSize: Typography.sm, fontWeight: '800', color: Colors.textPrimary },
-
-  summaryRow: {
-    flexDirection: 'row', backgroundColor: Colors.surface,
-    padding: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border, gap: Spacing.xs,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    marginBottom: Spacing.xl,
   },
-  filterChip: {
-    flex: 1, alignItems: 'center', paddingVertical: Spacing.sm,
-    borderRadius: Radius.md, backgroundColor: Colors.surfaceAlt,
+  savedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(163,166,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(163,166,255,0.18)',
   },
-  filterCount: { fontSize: Typography.lg, fontWeight: '900', color: Colors.textPrimary },
-  filterLabel: { fontSize: 9, fontWeight: '700', color: Colors.textTertiary, textTransform: 'uppercase' },
-
-  list: { padding: Spacing.base, paddingBottom: 60 },
-
-  card: { marginBottom: Spacing.md },
-  cardHighlight: { borderWidth: 2, borderColor: Colors.warning },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
-  statusDot: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  statusIcon: { fontSize: 18 },
-  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  cardTime: { fontSize: Typography.xs, color: Colors.textTertiary },
-
-  transferRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing.md },
-  person: { alignItems: 'center', width: 80 },
-  personName: { fontSize: Typography.xs, fontWeight: '700', color: Colors.textPrimary, marginTop: 4, textAlign: 'center' },
-  personRole: { fontSize: 9, color: Colors.textTertiary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  amountCenter: { flex: 1, alignItems: 'center' },
-  transferArrow: { fontSize: 24, color: Colors.primary },
-  transferAmount: { fontSize: Typography.xl, fontWeight: '900', color: Colors.primary },
-
-  noteBox: {
-    backgroundColor: Colors.dangerLight, borderRadius: Radius.sm, padding: Spacing.sm,
-    borderLeftWidth: 3, borderLeftColor: Colors.danger, marginBottom: Spacing.sm,
+  savedChipText: {
+    color: Colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
   },
-  noteLabel: { fontSize: Typography.xs, fontWeight: '700', color: Colors.danger, marginBottom: 2 },
-  noteText: { fontSize: Typography.sm, color: Colors.textPrimary, lineHeight: 18 },
-
-  confirmedAt: { fontSize: Typography.xs, color: Colors.success, fontWeight: '600', textAlign: 'center', marginBottom: Spacing.sm },
-
-  actionRow: { flexDirection: 'row', marginTop: Spacing.sm },
-  waitingBox: { backgroundColor: Colors.warningLight, borderRadius: Radius.sm, padding: Spacing.sm, marginTop: Spacing.sm },
-  waitingText: { fontSize: Typography.xs, color: Colors.textSecondary, textAlign: 'center' },
-
-  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  headerLabel: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs,
+    fontWeight: '700',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    textAlign: 'right',
+  },
+  headerAmount: {
+    color: Colors.secondary,
+    fontSize: Typography.xl,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  matrixCard: {
+    marginBottom: Spacing.xl,
+  },
+  panelTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.lg,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  panelCopy: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    marginBottom: Spacing.lg,
+  },
+  inlineTransfer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  inlineTransferText: {
+    color: Colors.textPrimary,
+    fontSize: Typography.base,
+    fontWeight: '700',
+    flex: 1,
+  },
+  inlineTransferAmount: {
+    color: Colors.secondary,
+    fontSize: Typography.base,
+    fontWeight: '800',
+    marginHorizontal: Spacing.sm,
+  },
+  emptyCopy: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+  },
+  section: {
+    gap: Spacing.md,
+    marginTop: Spacing.xl,
+  },
+  transactionCard: {},
+  transactionPending: {
+    borderColor: 'rgba(245,158,11,0.2)',
+  },
+  transactionDisputed: {
+    borderColor: 'rgba(255,110,132,0.2)',
+  },
+  transactionTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.base,
+  },
+  transactionCode: {
+    color: Colors.primary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  transactionStatus: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  transactionFlow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  transactionName: {
+    flex: 1,
+    color: Colors.textPrimary,
+    fontSize: Typography.base,
+    fontWeight: '700',
+  },
+  transactionAmount: {
+    color: Colors.secondary,
+    fontSize: Typography.base,
+    fontWeight: '800',
+  },
+  transactionNote: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    marginTop: Spacing.sm,
+  },
+  transactionActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.base,
+  },
+  upiRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
+  },
+  upiCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.base,
+    width: 100,
+  },
+  upiIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  upiIconText: {
+    fontWeight: '800',
+  },
+  upiName: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    fontWeight: '700',
+  },
+  reportCard: {
+    marginBottom: Spacing.lg,
+  },
+  reportLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.base,
+    marginBottom: Spacing.base,
+  },
+  reportIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.base,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  reportCopy: {
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    marginTop: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: Colors.overlay,
+    padding: Spacing.base,
+  },
   modalCard: {
-    backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
-    padding: Spacing.xl, paddingBottom: Spacing.xxxl,
+    marginBottom: Spacing.lg,
   },
-  modalTitle: { fontSize: Typography.xl, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
-  modalSub: { fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: Spacing.lg, lineHeight: 20 },
-  modalActions: { flexDirection: 'row', marginTop: Spacing.sm },
+  modalTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.xl,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  modalSub: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    marginBottom: Spacing.lg,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
 });

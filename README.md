@@ -1,221 +1,161 @@
-# SplitSure 🔐
+# SplitSure
 
-**Smart Expense Split with Proof & Accountability**
+SplitSure is a mobile-first shared-expense system with OTP auth, group ledgers, proof attachments, optimized settlements, and immutable audit history.
 
-> Every expense traceable. Every settlement mutually confirmed. Every modification permanently logged.
+## What’s in the repo
 
----
-
-## Architecture Overview
-
-```
-SplitSure/
-├── backend/           # FastAPI + PostgreSQL
-│   ├── app/
-│   │   ├── api/v1/endpoints/
-│   │   │   ├── auth.py          # OTP send/verify, JWT, refresh, logout
-│   │   │   ├── users.py         # Profile CRUD
-│   │   │   ├── groups.py        # Group + member management, invite links
-│   │   │   ├── expenses.py      # Expense CRUD + proof attachments
-│   │   │   ├── settlements.py   # Balance engine, initiate/confirm/dispute
-│   │   │   ├── audit.py         # Immutable audit log viewer
-│   │   │   └── reports.py       # PDF generation (Pro tier)
-│   │   ├── core/
-│   │   │   ├── config.py        # Settings (DB, JWT, S3, Twilio)
-│   │   │   ├── database.py      # Async SQLAlchemy
-│   │   │   └── security.py      # JWT utils, get_current_user
-│   │   ├── models/user.py       # All 9 SQLAlchemy models
-│   │   ├── schemas/schemas.py   # All Pydantic v2 schemas
-│   │   └── services/
-│   │       ├── settlement_engine.py  # Greedy algorithm (paise arithmetic)
-│   │       ├── audit_service.py      # Append-only audit logger
-│   │       └── s3_service.py         # Upload, hash, presigned URLs
-│   ├── alembic/versions/001_initial.py  # Full schema + audit trigger
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/          # React Native (Expo Router)
-│   ├── app/
-│   │   ├── _layout.tsx           # Root layout, QueryClient, Toast
-│   │   ├── login.tsx             # Auth screen
-│   │   ├── (tabs)/               # Bottom tab navigator
-│   │   │   ├── index.tsx         # Groups home
-│   │   │   └── profile.tsx       # User profile
-│   │   ├── group/[id].tsx        # Group detail (tabbed)
-│   │   ├── expense/[id].tsx      # Expense detail + proof
-│   │   ├── add-expense.tsx       # Add expense modal
-│   │   ├── balances.tsx          # Balance summary + UPI pay
-│   │   ├── settlements.tsx       # Settlement history + confirm
-│   │   └── audit.tsx             # Audit trail timeline
-│   └── src/
-│       ├── screens/              # All screen components
-│       ├── components/ui.tsx     # Button, Card, Input, Avatar, Badge
-│       ├── services/api.ts       # Axios client + all API calls
-│       ├── store/authStore.ts    # Zustand auth store
-│       ├── types/index.ts        # TypeScript types
-│       └── utils/
-│           ├── theme.ts          # Colors, Typography, Spacing
-│           └── helpers.ts        # formatRupees, timeAgo, etc.
-└── docker-compose.yml
+```text
+backend/   FastAPI + SQLAlchemy + PostgreSQL
+frontend/  Expo Router + React Native + React Query + Zustand
+uploads/   Local proof storage for development
 ```
 
----
+## Core production flows
 
-## Quick Start
+- OTP login with access and refresh tokens
+- Profile management with validated email and UPI ID
+- Group creation, invites, member management, and archival
+- Expense creation, update, deletion, dispute handling, and proof uploads
+- Balance computation and optimized settlement suggestions
+- Settlement initiation, confirmation, dispute, and admin resolution
+- Immutable audit log browsing
+- Paid-tier PDF report export
+
+## Local setup
 
 ### Prerequisites
-- Docker & Docker Compose
-- Node.js 18+ and npm
-- Expo CLI (`npm install -g expo-cli`)
+
+- Docker Desktop
+- Node.js 18+
+- Python 3.13+ recommended
 
 ### 1. Backend
 
 ```bash
-cd splitsure
-
-# Copy and configure environment
-cp backend/.env.example backend/.env
-# Edit backend/.env with your AWS, Twilio keys
-
-# Start services
-docker-compose up -d
-
-# Run database migrations (includes audit log immutability trigger)
-docker-compose exec api alembic upgrade head
-
-# API available at: http://localhost:8000
-# Swagger docs at:  http://localhost:8000/docs
+copy backend\.env.example backend\.env
+docker compose up -d
+docker compose exec api alembic upgrade head
 ```
+
+API endpoints:
+
+- App API: `http://localhost:8000/api/v1`
+- Health check: `http://localhost:8000/health`
+- Swagger: `http://localhost:8000/docs`
 
 ### 2. Frontend
 
 ```bash
-cd splitsure/frontend
-
-# Install dependencies
+cd frontend
 npm install
-
-# Set API URL (create .env file)
-echo "EXPO_PUBLIC_API_URL=http://localhost:8000/api/v1" > .env
-
-# Start Expo
-npx expo start
-
-# Press 'a' for Android emulator, 'i' for iOS simulator
-# Or scan QR code with Expo Go app
 ```
 
----
-
-## Environment Variables
-
-### Backend (`backend/.env`)
-
-```env
-DATABASE_URL=postgresql+asyncpg://splitsure:splitsure_dev@localhost:5432/splitsure
-SECRET_KEY=your-very-long-random-secret-key
-AWS_ACCESS_KEY_ID=your-aws-key
-AWS_SECRET_ACCESS_KEY=your-aws-secret
-AWS_REGION=ap-south-1
-S3_BUCKET_NAME=splitsure-proofs
-TWILIO_ACCOUNT_SID=your-twilio-sid
-TWILIO_AUTH_TOKEN=your-twilio-token
-TWILIO_PHONE_NUMBER=+1234567890
-```
-
-### Frontend (`frontend/.env`)
+Create `frontend/.env`:
 
 ```env
 EXPO_PUBLIC_API_URL=http://localhost:8000/api/v1
 ```
 
----
+Start the app:
 
-## Key Design Decisions
-
-### 💰 Amounts in Paise
-All monetary values are stored and computed as integers (paise) to avoid floating point errors. Display layer converts: `paise / 100`.
-
-### 🔒 Immutable Audit Log
-```sql
--- PostgreSQL trigger enforced at DB level
-CREATE TRIGGER audit_log_immutable
-BEFORE UPDATE OR DELETE ON audit_logs
-FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_mutation();
+```bash
+npx expo start
 ```
 
-### ⚖️ Settlement Algorithm
-Greedy O(n log n) — matches largest debtor with largest creditor:
-```python
-# See: backend/app/services/settlement_engine.py
-minimize_transactions(balances: dict[int, int]) -> List[Transaction]
+Notes:
+
+- Android emulators automatically rewrite `localhost` to `10.0.2.2`.
+- Development uses local proof storage by default, not S3.
+- Development OTP mode can return the OTP in the API response when `USE_DEV_OTP=true`.
+
+## Environment variables
+
+### Backend
+
+See [`backend/.env.example`](backend/.env.example) for the full local template.
+
+Important variables:
+
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `USE_LOCAL_STORAGE`
+- `LOCAL_UPLOAD_DIR`
+- `LOCAL_BASE_URL`
+- `USE_DEV_OTP`
+- `ALLOWED_ORIGINS`
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET_NAME` when using S3
+
+### Frontend
+
+- `EXPO_PUBLIC_API_URL`
+
+## Quality gates
+
+### Frontend typecheck
+
+```bash
+cd frontend
+npx tsc --noEmit
 ```
 
-### 📎 Proof Integrity
-- Files hashed with SHA-256 **server-side** after upload
-- Metadata (uploader ID, timestamp) written at upload time and immutable
-- Stored in private S3 bucket with SSE-AES256
-- Access via 15-minute presigned URLs only
+### Backend tests
 
-### 🔐 JWT + OTP Auth
-- OTP hashed with SHA-256 before DB storage
-- JWT blacklisted on logout (in-memory; swap for Redis in production)
-- Rate limit: max 5 OTP requests/phone/hour
+```bash
+cd backend
+..\.venv\Scripts\python.exe -m pytest
+```
 
----
+If you need a fresh dev install for backend tooling:
 
-## API Reference
+```bash
+pip install -r backend/requirements-dev.txt
+```
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/send-otp` | Send OTP to phone |
-| POST | `/api/v1/auth/verify-otp` | Verify OTP → get JWT |
-| POST | `/api/v1/auth/refresh` | Refresh access token |
-| POST | `/api/v1/auth/logout` | Blacklist token |
-| GET/PATCH | `/api/v1/users/me` | Profile |
-| GET/POST | `/api/v1/groups` | List/create groups |
-| GET/PATCH | `/api/v1/groups/{id}` | Group detail/update |
-| POST | `/api/v1/groups/{id}/members` | Add member |
-| POST | `/api/v1/groups/{id}/invite` | Create invite link |
-| POST | `/api/v1/groups/join/{token}` | Join via invite |
-| GET/POST | `/api/v1/groups/{id}/expenses` | List/create expenses |
-| GET/PATCH | `/api/v1/groups/{id}/expenses/{eid}` | Expense detail/edit |
-| POST | `/api/v1/groups/{id}/expenses/{eid}/dispute` | Raise dispute |
-| POST | `/api/v1/groups/{id}/expenses/{eid}/attachments` | Upload proof |
-| GET | `/api/v1/groups/{id}/settlements/balances` | Balance + settlements |
-| POST | `/api/v1/groups/{id}/settlements` | Initiate settlement |
-| POST | `/api/v1/groups/{id}/settlements/{sid}/confirm` | Confirm payment |
-| POST | `/api/v1/groups/{id}/settlements/{sid}/dispute` | Dispute payment |
-| POST | `/api/v1/groups/{id}/settlements/{sid}/resolve` | Resolve (admin) |
-| GET | `/api/v1/groups/{id}/audit` | Audit log |
-| GET | `/api/v1/groups/{id}/report` | PDF report (Pro only) |
+## API shape
 
----
+Base path: `/api/v1`
 
-## Production Checklist
+Main route groups:
 
-- [ ] Replace in-memory JWT blacklist with Redis
-- [ ] Enable Twilio OTP delivery (remove `dev_otp` from response)
-- [ ] Set strong `SECRET_KEY` in production
-- [ ] Configure S3 bucket policy (private, SSE-KMS)
-- [ ] Set up HTTPS with valid TLS certificate
-- [ ] Add rate limiting middleware (slowapi)
-- [ ] Configure push notifications (Expo Push / FCM)
-- [ ] Set up monitoring (Sentry, Datadog)
-- [ ] Implement payment gateway for Pro tier subscriptions
+- `/auth`
+- `/users`
+- `/groups`
+- `/groups/{group_id}/expenses`
+- `/groups/{group_id}/settlements`
+- `/groups/{group_id}/audit`
+- `/groups/{group_id}/report`
 
----
+Conventions:
 
-## Tech Stack
+- Auth is enforced at the route boundary with bearer tokens.
+- Validation errors and business-rule failures return explicit FastAPI `detail` messages.
+- Settlement creation is restricted to real outstanding optimized balances.
+- Expense updates support split changes instead of silently ignoring them.
 
-| Layer | Technology |
-|-------|------------|
-| Mobile App | React Native + Expo Router |
-| State Management | Zustand + React Query |
-| Backend API | FastAPI (Python) |
-| Database | PostgreSQL 16 (async via asyncpg) |
-| ORM | SQLAlchemy 2.0 async |
-| Auth | JWT (HS256) + OTP via Twilio |
-| File Storage | AWS S3 (SSE-AES256) |
-| PDF Generation | ReportLab |
-| Migrations | Alembic |
-| Containerization | Docker + Docker Compose |
+## Storage and security notes
+
+- Money is stored as integer paise.
+- Proof files are validated server-side and hashed with SHA-256.
+- Audit logs are append-only and protected by a database trigger.
+- Local development uses disk-backed file storage; production should use private S3.
+- OTPs are generated with `secrets`, not `random`.
+- Refresh failure clears the client session instead of leaving stale auth state behind.
+
+## Production checklist
+
+- Set a strong `SECRET_KEY`
+- Disable `USE_DEV_OTP`
+- Configure Twilio or another OTP provider
+- Switch `USE_LOCAL_STORAGE=false` and provide S3 credentials
+- Serve the API behind HTTPS
+- Run Alembic migrations as part of deploy
+- Add CI steps for `npx tsc --noEmit` and backend `pytest`
+- Add Redis-backed token revocation if logout invalidation must survive process restarts
+
+## Recent audit fixes
+
+- Completed the previously partial expense update flow so split changes are persisted correctly
+- Prevented invalid settlement initiation against non-existent balances
+- Tightened user profile, OTP, and group update validation
+- Added backend unit tests for split logic, settlement calculations, and schema validation
+- Connected auth refresh failure handling to client session cleanup

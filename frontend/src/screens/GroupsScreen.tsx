@@ -1,72 +1,37 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, RefreshControl,
-  TouchableOpacity, Modal, KeyboardAvoidingView, Platform,
-  ScrollView, Alert,
+  Alert,
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AppBackdrop, TopBar } from '../components/chrome';
+import { Button, Card, Input } from '../components/ui';
 import { groupsAPI } from '../services/api';
 import { Group } from '../types';
-import { Colors, Typography, Spacing, Radius, Shadow } from '../utils/theme';
-import { Button, Card, Input, Avatar, Badge, EmptyState } from '../components/ui';
+import { Colors, Radius, Spacing, Typography } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
-import { format } from 'date-fns';
-
-function GroupCard({ group, userId }: { group: Group; userId: number }) {
-  const router = useRouter();
-  const memberCount = group.members.length;
-  const isAdmin = group.members.find(m => m.user.id === userId)?.role === 'admin';
-
-  return (
-    <Card onPress={() => router.push(`/group/${group.id}`)} style={styles.groupCard}>
-      <View style={styles.groupCardHeader}>
-        <View style={styles.groupIconWrap}>
-          <Text style={styles.groupIcon}>
-            {group.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.groupInfo}>
-          <Text style={styles.groupName} numberOfLines={1}>{group.name}</Text>
-          {group.description && (
-            <Text style={styles.groupDesc} numberOfLines={1}>{group.description}</Text>
-          )}
-          <Text style={styles.groupMeta}>
-            {memberCount} member{memberCount !== 1 ? 's' : ''} · {format(new Date(group.created_at), 'MMM d, yyyy')}
-          </Text>
-        </View>
-        {isAdmin && (
-          <Badge label="Admin" color={Colors.primary} bgColor={Colors.primaryLight} />
-        )}
-      </View>
-
-      {/* Member avatars */}
-      <View style={styles.memberAvatars}>
-        {group.members.slice(0, 5).map((m, i) => (
-          <View key={m.id} style={[styles.avatarBorder, { marginLeft: i > 0 ? -10 : 0, zIndex: 5 - i }]}>
-            <Avatar name={m.user.name || m.user.phone} size={32} />
-          </View>
-        ))}
-        {memberCount > 5 && (
-          <View style={[styles.avatarBorder, styles.moreAvatar, { marginLeft: -10 }]}>
-            <Text style={styles.moreAvatarText}>+{memberCount - 5}</Text>
-          </View>
-        )}
-        <Text style={styles.tapHint}>Tap to open →</Text>
-      </View>
-    </Card>
-  );
-}
 
 export default function GroupsScreen() {
-  const { user } = useAuthStore();
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
-  const [desc, setDesc] = useState('');
+  const [description, setDescription] = useState('');
   const [nameError, setNameError] = useState('');
+  const [showJoin, setShowJoin] = useState(false);
+  const [inviteToken, setInviteToken] = useState('');
+  const [inviteError, setInviteError] = useState('');
 
-  const { data: groups, isLoading, refetch } = useQuery({
+  const groupsQuery = useQuery({
     queryKey: ['groups'],
     queryFn: async () => {
       const { data } = await groupsAPI.list();
@@ -74,156 +39,253 @@ export default function GroupsScreen() {
     },
   });
 
-  const createMutation = useMutation({
-    mutationFn: () => groupsAPI.create({ name: name.trim(), description: desc.trim() || undefined }),
+  const createGroup = useMutation({
+    mutationFn: () => groupsAPI.create({ name: name.trim(), description: description.trim() || undefined }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       setShowCreate(false);
       setName('');
-      setDesc('');
+      setDescription('');
+      setNameError('');
     },
-    onError: (e: any) => {
-      setNameError(e?.response?.data?.detail || 'Failed to create group');
+    onError: (error: any) => {
+      setNameError(error?.response?.data?.detail || 'Failed to create group');
     },
   });
 
-  const handleCreate = () => {
-    setNameError('');
-    if (name.trim().length < 2) {
-      setNameError('Group name must be at least 2 characters');
-      return;
-    }
-    createMutation.mutate();
-  };
+  const joinGroup = useMutation({
+    mutationFn: () => groupsAPI.joinViaInvite(inviteToken.trim()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      setShowJoin(false);
+      setInviteToken('');
+      setInviteError('');
+      Alert.alert('Joined group successfully');
+    },
+    onError: (error: any) => {
+      setInviteError(error?.response?.data?.detail || 'Failed to join group');
+    },
+  });
 
   return (
-    <View style={styles.container}>
-      {/* Top bar */}
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'there'} 👋</Text>
-          <Text style={styles.subtitle}>Your expense groups</Text>
-        </View>
-        <Button
-          title="+ New Group"
-          onPress={() => setShowCreate(true)}
-          size="sm"
-        />
-      </View>
-
-      <FlatList
-        data={groups}
-        keyExtractor={g => String(g.id)}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <GroupCard group={item} userId={user?.id ?? 0} />
-        )}
-        ListEmptyComponent={
-          isLoading ? null : (
-            <EmptyState
-              icon="👥"
-              title="No groups yet"
-              subtitle="Create a group to start splitting expenses with friends"
-            />
-          )
-        }
-        refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.primary} />
-        }
+    <AppBackdrop>
+      <TopBar
+        title="ACTIVE GROUPS"
+        subtitle="Operational shared ledgers"
+        userName={user?.name || user?.phone}
+        rightIcon="add"
+        onRightPress={() => setShowCreate(true)}
       />
 
-      {/* Create Group Modal */}
-      <Modal visible={showCreate} transparent animationType="slide">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={<RefreshControl refreshing={groupsQuery.isLoading} onRefresh={groupsQuery.refetch} tintColor={Colors.primary} />}
+      >
+        <Text style={styles.overline}>NETWORKED POOLS</Text>
+        <Text style={styles.title}>Precision group ledgers for every shared mission.</Text>
+
+        {groupsQuery.isLoading ? (
+          <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
+        ) : (
+          groupsQuery.data?.map((group, index) => (
+            <Pressable key={group.id} onPress={() => router.push(`/group/${group.id}`)} style={({ pressed }) => [pressed && { opacity: 0.9 }]}>
+              <Card style={styles.groupCard}>
+                <View style={styles.groupTop}>
+                  <View style={styles.logoDisc}>
+                    <Text style={styles.logoText}>{['🏖', '🏠', '🍱', '🚀'][index % 4]}</Text>
+                  </View>
+                  <View style={styles.memberCount}>
+                    <Text style={styles.memberCountText}>{group.members.length} MEMBERS</Text>
+                  </View>
+                </View>
+                <Text style={styles.groupName}>{group.name}</Text>
+                {group.description ? <Text style={styles.groupDescription}>{group.description}</Text> : null}
+                <View style={styles.memberRow}>
+                  {group.members.slice(0, 5).map((member, memberIndex) => (
+                    <View key={member.id} style={[styles.memberBadge, { marginLeft: memberIndex === 0 ? 0 : -10 }]}>
+                      <Text style={styles.memberBadgeText}>
+                        {(member.user.name || member.user.phone).slice(0, 1).toUpperCase()}
+                      </Text>
+                    </View>
+                  ))}
+                  <Text style={styles.tapHint}>Open ledger</Text>
+                </View>
+              </Card>
+            </Pressable>
+          ))
+        )}
+      </ScrollView>
+
+      <Modal animationType="slide" transparent visible={showCreate}>
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <View style={[styles.modalCard, Shadow.lg]}>
-              <Text style={styles.modalTitle}>Create New Group</Text>
-              <Text style={styles.modalSub}>Groups help you organize expenses by context</Text>
-
-              <Input
-                label="Group Name *"
-                value={name}
-                onChangeText={val => { setName(val); setNameError(''); }}
-                placeholder="e.g., Goa Trip 2025, Flatmates"
-                maxLength={50}
-                error={nameError}
-                autoFocus
-              />
-
-              <Input
-                label="Description (optional)"
-                value={desc}
-                onChangeText={setDesc}
-                placeholder="What's this group for?"
-                maxLength={200}
-                multiline
-                numberOfLines={2}
-                style={{ height: 70, textAlignVertical: 'top', paddingTop: Spacing.sm }}
-              />
-
-              <View style={styles.modalActions}>
-                <Button
-                  title="Cancel"
-                  onPress={() => { setShowCreate(false); setName(''); setDesc(''); setNameError(''); }}
-                  variant="ghost"
-                  style={{ flex: 1, marginRight: Spacing.sm }}
-                />
-                <Button
-                  title="Create Group"
-                  onPress={handleCreate}
-                  loading={createMutation.isPending}
-                  style={{ flex: 1.5 }}
-                />
-              </View>
+          <Card style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Create New Group</Text>
+            <Text style={styles.modalSub}>Only the fields shown in the live interface are included.</Text>
+            <Input
+              label="Group Name"
+              value={name}
+              onChangeText={(value) => {
+                setName(value);
+                setNameError('');
+              }}
+              error={nameError}
+              placeholder="Goa Trip 2025"
+            />
+            <Input
+              label="Description"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Optional context"
+            />
+            <View style={styles.modalActions}>
+              <Button title="Join via Invite" onPress={() => setShowJoin(true)} style={{ flex: 1.2 }} variant="secondary" />
+              <Button title="Cancel" onPress={() => setShowCreate(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button title="Create Group" onPress={() => createGroup.mutate()} style={{ flex: 1.4 }} loading={createGroup.isPending} />
             </View>
-          </KeyboardAvoidingView>
+          </Card>
         </View>
       </Modal>
-    </View>
+
+      <Modal animationType="slide" transparent visible={showJoin}>
+        <View style={styles.modalOverlay}>
+          <Card style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Join Group</Text>
+            <Text style={styles.modalSub}>Paste the invite token shared by your group admin.</Text>
+            <Input
+              label="Invite Token"
+              value={inviteToken}
+              onChangeText={(value) => {
+                setInviteToken(value);
+                setInviteError('');
+              }}
+              error={inviteError}
+              placeholder="Paste invite token"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.modalActions}>
+              <Button title="Back" onPress={() => setShowJoin(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button title="Join Group" onPress={() => joinGroup.mutate()} style={{ flex: 1.4 }} loading={joinGroup.isPending} />
+            </View>
+          </Card>
+        </View>
+      </Modal>
+    </AppBackdrop>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  topBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.base, paddingTop: 16, paddingBottom: Spacing.md,
-    backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  scroll: {
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.base,
+    paddingBottom: 140,
   },
-  greeting: { fontSize: Typography.lg, fontWeight: '800', color: Colors.textPrimary },
-  subtitle: { fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 2 },
-  list: { padding: Spacing.base, paddingBottom: 80 },
-
-  groupCard: { marginBottom: Spacing.md },
-  groupCardHeader: { flexDirection: 'row', alignItems: 'center' },
-  groupIconWrap: {
-    width: 50, height: 50, borderRadius: Radius.md,
-    backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
-    marginRight: Spacing.md,
+  overline: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs,
+    fontWeight: '800',
+    letterSpacing: 3,
+    marginBottom: Spacing.sm,
   },
-  groupIcon: { fontSize: 22, color: Colors.textInverse, fontWeight: '700' },
-  groupInfo: { flex: 1, marginRight: Spacing.sm },
-  groupName: { fontSize: Typography.md, fontWeight: '700', color: Colors.textPrimary },
-  groupDesc: { fontSize: Typography.sm, color: Colors.textSecondary, marginTop: 2 },
-  groupMeta: { fontSize: Typography.xs, color: Colors.textTertiary, marginTop: 4 },
-
-  memberAvatars: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.md },
-  avatarBorder: {
-    borderWidth: 2, borderColor: Colors.surface, borderRadius: 99,
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: '800',
+    marginBottom: Spacing.xl,
   },
-  moreAvatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: Colors.surfaceAlt, alignItems: 'center', justifyContent: 'center',
+  groupCard: {
+    marginBottom: Spacing.md,
   },
-  moreAvatarText: { fontSize: Typography.xs, fontWeight: '700', color: Colors.textSecondary },
-  tapHint: { marginLeft: 'auto', fontSize: Typography.xs, color: Colors.textTertiary, fontStyle: 'italic' },
-
-  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  groupTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.base,
+  },
+  logoDisc: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  logoText: {
+    fontSize: 26,
+  },
+  memberCount: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+    backgroundColor: Colors.chip,
+  },
+  memberCountText: {
+    color: Colors.textSecondary,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.3,
+  },
+  groupName: {
+    color: Colors.textPrimary,
+    fontSize: Typography.xl,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  groupDescription: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    lineHeight: 20,
+    marginBottom: Spacing.lg,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  memberBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.surfaceHighest,
+    borderWidth: 2,
+    borderColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  memberBadgeText: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tapHint: {
+    marginLeft: 'auto',
+    color: Colors.textMuted,
+    fontSize: Typography.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: Colors.overlay,
+    padding: Spacing.base,
+  },
   modalCard: {
-    backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
-    padding: Spacing.xl, paddingBottom: Spacing.xxxl,
+    marginBottom: Spacing.lg,
   },
-  modalTitle: { fontSize: Typography.xl, fontWeight: '800', color: Colors.textPrimary, marginBottom: 4 },
-  modalSub: { fontSize: Typography.sm, color: Colors.textSecondary, marginBottom: Spacing.lg },
-  modalActions: { flexDirection: 'row', marginTop: Spacing.sm },
+  modalTitle: {
+    color: Colors.textPrimary,
+    fontSize: Typography.xl,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  modalSub: {
+    color: Colors.textSecondary,
+    fontSize: Typography.base,
+    marginBottom: Spacing.lg,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
 });

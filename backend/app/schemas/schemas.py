@@ -1,4 +1,5 @@
-from pydantic import BaseModel, field_validator, model_validator
+import re
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 from app.models.user import SplitType, MemberRole, SettlementStatus, ExpenseCategory, AuditEventType
@@ -24,6 +25,24 @@ class OTPVerify(BaseModel):
     phone: str
     otp: str
 
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        v = v.strip().replace(" ", "")
+        if not v.startswith("+"):
+            v = "+91" + v
+        if len(v) < 10:
+            raise ValueError("Invalid phone number")
+        return v
+
+    @field_validator("otp")
+    @classmethod
+    def validate_otp(cls, v):
+        value = v.strip()
+        if not (len(value) == 6 and value.isdigit()):
+            raise ValueError("OTP must be a 6-digit code")
+        return value
+
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -43,6 +62,42 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     upi_id: Optional[str] = None
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip()
+        if not value:
+            return None
+        if len(value) > 100:
+            raise ValueError("Name must be 100 characters or fewer")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip().lower()
+        if not value:
+            return None
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("Enter a valid email address")
+        return value
+
+    @field_validator("upi_id")
+    @classmethod
+    def validate_upi_id(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip().lower()
+        if not value:
+            return None
+        if not re.fullmatch(r"[a-z0-9.\-_]{2,256}@[a-z]{2,64}", value):
+            raise ValueError("Enter a valid UPI ID")
+        return value
+
 
 class UserOut(BaseModel):
     id: int
@@ -54,8 +109,7 @@ class UserOut(BaseModel):
     is_paid_tier: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ─── Group ───────────────────────────────────────────────────────────────────
@@ -77,6 +131,24 @@ class GroupUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
 
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip()
+        if not (2 <= len(value) <= 50):
+            raise ValueError("Group name must be 2-50 characters")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip()
+        return value or None
+
 
 class GroupMemberOut(BaseModel):
     id: int
@@ -84,8 +156,7 @@ class GroupMemberOut(BaseModel):
     role: MemberRole
     joined_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GroupOut(BaseModel):
@@ -97,12 +168,21 @@ class GroupOut(BaseModel):
     created_at: datetime
     members: List[GroupMemberOut] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AddMemberRequest(BaseModel):
     phone: str
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        v = v.strip().replace(" ", "")
+        if not v.startswith("+"):
+            v = "+91" + v
+        if len(v) < 10:
+            raise ValueError("Invalid phone number")
+        return v
 
 
 class InviteLinkOut(BaseModel):
@@ -162,6 +242,31 @@ class ExpenseUpdate(BaseModel):
     split_type: Optional[SplitType] = None
     splits: Optional[List[SplitInput]] = None
 
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v: Optional[int]):
+        if v is None:
+            return v
+        if v <= 0:
+            raise ValueError("Amount must be greater than 0")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip()
+        if not value:
+            raise ValueError("Description is required")
+        return value
+
+    @model_validator(mode="after")
+    def validate_split_update(self):
+        if self.split_type is not None and not self.splits:
+            raise ValueError("Splits are required when changing split type")
+        return self
+
 
 class SplitOut(BaseModel):
     id: int
@@ -170,8 +275,7 @@ class SplitOut(BaseModel):
     amount: int
     percentage: Optional[float]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProofAttachmentOut(BaseModel):
@@ -183,8 +287,7 @@ class ProofAttachmentOut(BaseModel):
     uploaded_at: datetime
     presigned_url: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExpenseOut(BaseModel):
@@ -204,8 +307,7 @@ class ExpenseOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DisputeRequest(BaseModel):
@@ -248,6 +350,13 @@ class SettlementCreate(BaseModel):
     receiver_id: int
     amount: int
 
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Amount must be greater than 0")
+        return v
+
 
 class SettlementOut(BaseModel):
     id: int
@@ -261,8 +370,7 @@ class SettlementOut(BaseModel):
     created_at: datetime
     confirmed_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DisputeSettlementRequest(BaseModel):
@@ -279,6 +387,14 @@ class DisputeSettlementRequest(BaseModel):
 class ResolveDisputeRequest(BaseModel):
     resolution_note: str
 
+    @field_validator("resolution_note")
+    @classmethod
+    def validate_resolution_note(cls, v):
+        value = v.strip()
+        if len(value) < 5:
+            raise ValueError("Resolution note must be at least 5 characters")
+        return value
+
 
 # ─── Audit ───────────────────────────────────────────────────────────────────
 
@@ -292,5 +408,4 @@ class AuditLogOut(BaseModel):
     metadata_json: Optional[dict]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
