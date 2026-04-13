@@ -163,17 +163,24 @@ export const usersAPI = {
   getMe: () => api.get('/users/me'),
   updateMe: (data: { name?: string; email?: string; upi_id?: string }) =>
     api.patch('/users/me', data),
+  uploadAvatar: (formData: FormData) =>
+    api.post('/users/me/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  registerPushToken: (push_token: string) =>
+    api.post('/users/me/push-token', { push_token }),
 };
 
 // ── Groups ────────────────────────────────────────────────────────────────
 export const groupsAPI = {
-  list: () => api.get('/groups'),
+  list: (params?: { include_archived?: boolean }) => api.get('/groups', { params }),
   get: (id: number) => api.get(`/groups/${id}`),
   create: (data: { name: string; description?: string }) =>
     api.post('/groups', data),
   update: (id: number, data: { name?: string; description?: string }) =>
     api.patch(`/groups/${id}`, data),
   archive: (id: number) => api.delete(`/groups/${id}`),
+  unarchive: (id: number) => api.post(`/groups/${id}/unarchive`),
   addMember: (groupId: number, phone: string) =>
     api.post(`/groups/${groupId}/members`, { phone }),
   removeMember: (groupId: number, userId: number) =>

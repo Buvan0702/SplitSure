@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -142,9 +143,19 @@ export function Input({
 interface AvatarProps {
   name?: string | null;
   size?: number;
+  imageUrl?: string | null;
 }
 
-export function Avatar({ name, size = 40 }: AvatarProps) {
+export function Avatar({ name, size = 40, imageUrl }: AvatarProps) {
+  if (imageUrl) {
+    return (
+      <Image
+        source={{ uri: imageUrl }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    );
+  }
+
   const initials = (name || '?')
     .split(' ')
     .map((part) => part[0])

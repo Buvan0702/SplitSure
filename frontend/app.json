@@ -9,7 +9,23 @@
     "plugins": ["expo-router"],
     "android": {
       "package": "com.splitsure.app",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "splitsure",
+              "host": "*"
+            }
+          ],
+          "category": ["DEFAULT", "BROWSABLE"]
+        }
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.splitsure.app"
     }
   }
 }

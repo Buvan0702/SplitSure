@@ -324,6 +324,14 @@ export default function ExpenseDetailScreen() {
 
       {/* Actions */}
       <View style={styles.actions}>
+        {canEdit && !expense.is_disputed && isMyExpense && (
+          <Button
+            title="✏️ Edit Expense"
+            onPress={() => router.push(`/edit-expense?id=${id}&groupId=${groupId}`)}
+            variant="secondary"
+            style={{ marginBottom: Spacing.sm }}
+          />
+        )}
         {canEdit && !expense.is_disputed && (
           <Button
             title="⚠️ Raise Dispute"

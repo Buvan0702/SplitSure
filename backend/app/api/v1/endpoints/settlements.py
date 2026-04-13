@@ -22,6 +22,7 @@ from app.services.settlement_engine import (
     Transaction,
 )
 from app.services.audit_service import log_event
+from app.services.push_service import send_push_notification
 
 router = APIRouter(prefix="/groups/{group_id}/settlements", tags=["settlements"])
 
@@ -277,6 +278,18 @@ async def initiate_settlement(
 
     await db.commit()
 
+    # Send push notification to receiver
+    receiver_result = await db.execute(select(User).where(User.id == body.receiver_id))
+    receiver = receiver_result.scalar_one_or_none()
+    if receiver and receiver.push_token:
+        payer_name = current_user.name or current_user.phone
+        await send_push_notification(
+            receiver.push_token,
+            title="Payment to confirm \ud83d\udcb8",
+            body=f"{payer_name} marked \u20b9{body.amount/100:.2f} as paid. Tap to confirm.",
+            data={"type": "settlement", "group_id": group_id},
+        )
+
     result = await db.execute(
         select(Settlement)
         .options(
@@ -331,6 +344,19 @@ async def confirm_settlement(
 
     await db.commit()
     await db.refresh(settlement)
+
+    # Notify payer that payment was confirmed
+    payer_result = await db.execute(select(User).where(User.id == settlement.payer_id))
+    payer = payer_result.scalar_one_or_none()
+    if payer and payer.push_token:
+        receiver_name = current_user.name or current_user.phone
+        await send_push_notification(
+            payer.push_token,
+            title="Payment confirmed \u2705",
+            body=f"{receiver_name} confirmed your \u20b9{settlement.amount/100:.2f} payment.",
+            data={"type": "settlement_confirmed", "group_id": group_id},
+        )
+
     return settlement
 
 
@@ -371,6 +397,24 @@ async def dispute_settlement(
 
     await db.commit()
     await db.refresh(settlement)
+
+    # Notify group admins about the dispute
+    admin_result = await db.execute(
+        select(GroupMember)
+        .options(selectinload(GroupMember.user))
+        .where(GroupMember.group_id == group_id)
+        .where(GroupMember.role == MemberRole.ADMIN)
+    )
+    for admin_member in admin_result.scalars().all():
+        if admin_member.user.push_token and admin_member.user_id != current_user.id:
+            disputer_name = current_user.name or current_user.phone
+            await send_push_notification(
+                admin_member.user.push_token,
+                title="Settlement disputed \u26a0\ufe0f",
+                body=f"{disputer_name} disputed a \u20b9{settlement.amount/100:.2f} payment. Review needed.",
+                data={"type": "settlement_disputed", "group_id": group_id},
+            )
+
     return settlement
 
 

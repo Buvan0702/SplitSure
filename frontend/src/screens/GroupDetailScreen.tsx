@@ -33,6 +33,15 @@ export default function GroupDetailScreen() {
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [groupError, setGroupError] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string | undefined>(undefined);
+
+  // Debounce search input
+  React.useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(searchText), 400);
+    return () => clearTimeout(timeout);
+  }, [searchText]);
 
   const groupQuery = useQuery({
     queryKey: ['group', id],
@@ -43,9 +52,12 @@ export default function GroupDetailScreen() {
   });
 
   const expensesQuery = useQuery({
-    queryKey: ['expenses', id],
+    queryKey: ['expenses', id, debouncedSearch, filterCategory],
     queryFn: async () => {
-      const { data } = await expensesAPI.list(Number(id));
+      const params: { search?: string; category?: string } = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filterCategory) params.category = filterCategory;
+      const { data } = await expensesAPI.list(Number(id), params);
       return data as Expense[];
     },
   });
@@ -220,6 +232,28 @@ export default function GroupDetailScreen() {
 
         {tab === 'expenses' ? (
           <View style={styles.section}>
+            <Input
+              containerStyle={{ marginBottom: Spacing.sm }}
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Search expenses..."
+              leftAddon={<MaterialIcons name="search" size={18} color={Colors.textMuted} />}
+            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.base }}>
+              {[undefined, 'food', 'transport', 'accommodation', 'utilities', 'misc'].map((cat) => {
+                const label = cat ? cat.charAt(0).toUpperCase() + cat.slice(1) : 'All';
+                const active = cat === filterCategory;
+                return (
+                  <Pressable
+                    key={cat || 'all'}
+                    onPress={() => setFilterCategory(cat)}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                  >
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
             {expensesQuery.isLoading ? (
               <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
             ) : (
@@ -585,5 +619,26 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     gap: Spacing.sm,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.surfaceLowest,
+    borderWidth: 1,
+    borderColor: Colors.ghostBorder,
+    marginRight: Spacing.sm,
+  },
+  filterChipActive: {
+    backgroundColor: 'rgba(163,166,255,0.15)',
+    borderColor: 'rgba(163,166,255,0.3)',
+  },
+  filterChipText: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs,
+    fontWeight: '700',
+  },
+  filterChipTextActive: {
+    color: Colors.primary,
   },
 });

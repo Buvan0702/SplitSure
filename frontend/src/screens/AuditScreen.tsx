@@ -3,12 +3,14 @@ import {
   View, Text, StyleSheet, FlatList, RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { auditAPI } from '../services/api';
 import { AuditLog, AuditEventType } from '../types';
 import { Colors, Typography, Spacing, Radius } from '../utils/theme';
 import { Avatar, EmptyState } from '../components/ui';
 import { format, formatDistanceToNow } from 'date-fns';
+
+const PAGE_SIZE = 20;
 
 const EVENT_META: Record<AuditEventType, { icon: string; color: string; label: string }> = {
   expense_created:       { icon: '➕', color: Colors.success,  label: 'added an expense' },
@@ -89,13 +91,30 @@ function AuditEntry({ log }: { log: AuditLog }) {
 export default function AuditScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
 
-  const { data: logs, isLoading, refetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch,
+  } = useInfiniteQuery({
     queryKey: ['audit', groupId],
-    queryFn: async () => {
-      const { data } = await auditAPI.list(Number(groupId), { limit: 100 });
-      return data as AuditLog[];
+    queryFn: async ({ pageParam = 0 }) => {
+      const { data: logs } = await auditAPI.list(Number(groupId), {
+        limit: PAGE_SIZE,
+        offset: pageParam,
+      });
+      return logs as AuditLog[];
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (lastPage.length < PAGE_SIZE) return undefined;
+      return allPages.flat().length;
     },
   });
+
+  const logs = data?.pages.flat() ?? [];
 
   return (
     <View style={styles.container}>
@@ -113,6 +132,17 @@ export default function AuditScreen() {
           isLoading ? null : (
             <EmptyState icon="📋" title="No activity yet" subtitle="Actions taken in this group will appear here" />
           )
+        }
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+          }
+        }}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <Text style={styles.loadingMore}>Loading more...</Text>
+          ) : null
         }
         refreshControl={
           <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={Colors.primary} />
@@ -163,4 +193,11 @@ const styles = StyleSheet.create({
   },
   metaText: { fontSize: Typography.xs, color: Colors.textSecondary, marginBottom: 2 },
   metaKey: { fontWeight: '700', color: Colors.primary },
+
+  loadingMore: {
+    textAlign: 'center',
+    color: Colors.textSecondary,
+    fontSize: Typography.sm,
+    paddingVertical: Spacing.base,
+  },
 });

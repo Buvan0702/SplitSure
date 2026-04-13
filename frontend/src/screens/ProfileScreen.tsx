@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
+import * as ImagePicker from 'expo-image-picker';
 import { AppBackdrop, TopBar } from '../components/chrome';
 import { Avatar, Badge, Button, Card, Input } from '../components/ui';
 import { usersAPI } from '../services/api';
@@ -14,6 +15,7 @@ export default function ProfileScreen() {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [upiId, setUpiId] = useState(user?.upi_id || '');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const updateProfile = useMutation({
     mutationFn: () => usersAPI.updateMe({ name, email, upi_id: upiId }),
@@ -26,12 +28,59 @@ export default function ProfileScreen() {
     },
   });
 
+  const handleAvatarPick = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    if ((asset.fileSize ?? 0) > 2 * 1024 * 1024) {
+      Alert.alert('File Too Large', 'Please select an image under 2MB.');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: asset.uri,
+        name: asset.fileName || 'avatar.jpg',
+        type: asset.mimeType || 'image/jpeg',
+      } as any);
+
+      const { data } = await usersAPI.uploadAvatar(formData);
+      updateUser(data);
+      Alert.alert('Avatar updated!');
+    } catch (e: any) {
+      Alert.alert('Upload Failed', e?.response?.data?.detail || 'Failed to upload avatar');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   return (
     <AppBackdrop>
       <TopBar title="PROFILE" subtitle="Identity and payout configuration" userName={user?.name || user?.phone} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <Card style={styles.heroCard}>
-          <Avatar name={user?.name || user?.phone} size={84} />
+          <Pressable onPress={handleAvatarPick} style={styles.avatarWrap}>
+            <Avatar name={user?.name || user?.phone} size={84} imageUrl={user?.avatar_url} />
+            <View style={styles.avatarEditBadge}>
+              <Text style={styles.avatarEditIcon}>📷</Text>
+            </View>
+          </Pressable>
+          {uploadingAvatar && <Text style={styles.uploadingText}>Uploading...</Text>}
           <Text style={styles.name}>{user?.name || 'Anonymous Operator'}</Text>
           <Text style={styles.phone}>{user?.phone}</Text>
           <Badge
@@ -77,6 +126,31 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     alignItems: 'center',
+  },
+  avatarWrap: {
+    position: 'relative',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.surface,
+  },
+  avatarEditIcon: {
+    fontSize: 12,
+  },
+  uploadingText: {
+    color: Colors.primary,
+    fontSize: Typography.xs,
+    fontWeight: '700',
+    marginTop: Spacing.sm,
   },
   name: {
     color: Colors.textPrimary,
