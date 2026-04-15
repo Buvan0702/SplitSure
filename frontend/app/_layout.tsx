@@ -8,7 +8,7 @@ import Toast from 'react-native-toast-message';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { useAuthStore } from '../src/store/authStore';
-import { Colors } from '../src/utils/theme';
+import { ThemeProvider, useTheme } from '../src/utils/theme';
 
 // Configure how notifications appear when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -26,8 +26,10 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function RootLayout() {
+// Inner component that has access to theme context
+function ThemedRootLayout() {
   const { loadUser } = useAuthStore();
+  const { colors, isDark } = useTheme();
 
   useEffect(() => {
     loadUser();
@@ -43,28 +45,38 @@ export default function RootLayout() {
   }, []);
 
   return (
+    <>
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="group/[id]" />
+        <Stack.Screen name="expense/[id]" />
+        <Stack.Screen name="add-expense" />
+        <Stack.Screen name="edit-expense" />
+        <Stack.Screen name="balances" />
+        <Stack.Screen name="settlements" />
+        <Stack.Screen name="audit" />
+        <Stack.Screen name="join/[token]" />
+      </Stack>
+      <Toast />
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: Colors.background },
-            }}
-          >
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="login" />
-            <Stack.Screen name="group/[id]" />
-            <Stack.Screen name="expense/[id]" />
-            <Stack.Screen name="add-expense" />
-            <Stack.Screen name="edit-expense" />
-            <Stack.Screen name="balances" />
-            <Stack.Screen name="settlements" />
-            <Stack.Screen name="audit" />
-            <Stack.Screen name="join/[token]" />
-          </Stack>
-          <Toast />
+          <ThemeProvider>
+            <ThemedRootLayout />
+          </ThemeProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

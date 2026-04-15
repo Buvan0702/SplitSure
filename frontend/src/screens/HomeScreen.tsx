@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -7,7 +8,7 @@ import { AppBackdrop, BrandWordmark, TopBar } from '../components/chrome';
 import { Card } from '../components/ui';
 import { groupsAPI, settlementsAPI } from '../services/api';
 import { Group, GroupBalances } from '../types';
-import { Colors, Radius, Shadow, Spacing, Typography } from '../utils/theme';
+import { Radius, Shadow, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
 const formatMoney = (value: number) => {
@@ -16,6 +17,7 @@ const formatMoney = (value: number) => {
 };
 
 export default function HomeScreen() {
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const { user } = useAuthStore();
 
@@ -61,62 +63,75 @@ export default function HomeScreen() {
     <AppBackdrop>
       <TopBar title={<BrandWordmark compact />} userName={user?.name || user?.phone} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.heroWrap}>
+        <Animated.View entering={FadeInDown.duration(400)} style={[styles.heroWrap, { backgroundColor: colors.primaryDim }]}>
           <View style={styles.heroBorder}>
             <Card style={styles.heroCard}>
-              <Text style={styles.heroLabel}>NET POSITION</Text>
-              <Text style={[styles.heroAmount, net < 0 && { color: Colors.danger }]}>
+              <Text style={[styles.heroLabel, { color: colors.textSecondary }]}>NET POSITION</Text>
+              <Text style={[styles.heroAmount, { color: colors.secondary }, net < 0 && { color: colors.danger }]}>
                 {net < 0 ? '-' : ''}
                 {formatMoney(net)}
               </Text>
-              <Text style={styles.heroSub}>across {groups.length} active groups</Text>
+              <Text style={[styles.heroSub, { color: colors.textMuted }]}>across {groups.length} active groups</Text>
 
               <View style={styles.statChips}>
-                <View style={styles.statChip}>
-                  <View style={[styles.signalDot, { backgroundColor: Colors.secondary }]} />
-                  <Text style={styles.statChipLabel}>OWED</Text>
-                  <Text style={styles.statChipValue}>{formatMoney(owed)}</Text>
+                <View style={[styles.statChip, { backgroundColor: colors.chip, borderColor: colors.ghostBorder }]}>
+                  <View style={[styles.signalDot, { backgroundColor: colors.secondary }]} />
+                  <Text style={[styles.statChipLabel, { color: colors.textSecondary }]}>OWED</Text>
+                  <Text style={[styles.statChipValue, { color: colors.textPrimary }]}>{formatMoney(owed)}</Text>
                 </View>
-                <View style={styles.statChip}>
-                  <View style={[styles.signalDot, { backgroundColor: Colors.danger }]} />
-                  <Text style={styles.statChipLabel}>OWE</Text>
-                  <Text style={styles.statChipValue}>{formatMoney(owe)}</Text>
+                <View style={[styles.statChip, { backgroundColor: colors.chip, borderColor: colors.ghostBorder }]}>
+                  <View style={[styles.signalDot, { backgroundColor: colors.danger }]} />
+                  <Text style={[styles.statChipLabel, { color: colors.textSecondary }]}>OWE</Text>
+                  <Text style={[styles.statChipValue, { color: colors.textPrimary }]}>{formatMoney(owe)}</Text>
                 </View>
               </View>
             </Card>
           </View>
-        </View>
+        </Animated.View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionsRow}>
-          <QuickAction
-            color={Colors.primary}
-            icon="photo-camera"
-            label="Scan Receipt"
-            onPress={() => leadGroup && router.push(`/add-expense?groupId=${leadGroup.id}`)}
-          />
-          <QuickAction
-            color={Colors.secondary}
-            icon="bolt"
-            label="Quick Split"
-            onPress={() => router.push('/(tabs)/groups')}
-          />
-          <QuickAction
-            color={Colors.tertiary}
-            icon="payments"
-            label="Settle Now"
-            onPress={() => leadGroup && router.push(`/settlements?groupId=${leadGroup.id}`)}
-          />
+          <Animated.View entering={FadeIn.delay(100)}>
+            <QuickAction
+              color={colors.primary}
+              icon="photo-camera"
+              label="Scan Receipt"
+              onPress={() => leadGroup && router.push(`/add-expense?groupId=${leadGroup.id}`)}
+            />
+          </Animated.View>
+          <Animated.View entering={FadeIn.delay(200)}>
+            <QuickAction
+              color={colors.secondary}
+              icon="bolt"
+              label="Quick Split"
+              onPress={() => router.push('/(tabs)/groups')}
+            />
+          </Animated.View>
+          <Animated.View entering={FadeIn.delay(300)}>
+            <QuickAction
+              color={colors.tertiary}
+              icon="payments"
+              label="Settle Now"
+              onPress={() => leadGroup && router.push(`/settlements?groupId=${leadGroup.id}`)}
+            />
+          </Animated.View>
         </ScrollView>
 
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Active Groups</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Active Groups</Text>
           <Pressable onPress={() => router.push('/(tabs)/groups')}>
-            <Text style={styles.sectionAction}>See All</Text>
+            <Text style={[styles.sectionAction, { color: colors.primary }]}>See All</Text>
           </Pressable>
         </View>
 
-        {loading ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
+        {groupsQuery.isError ? (
+          <View style={{ alignItems: 'center', padding: 20 }}>
+            <Text style={{ color: colors.danger, fontSize: 14, textAlign: 'center' }}>Failed to load data</Text>
+            <Pressable onPress={() => groupsQuery.refetch()} style={{ marginTop: 8 }}>
+              <Text style={{ color: colors.primary, fontSize: 14 }}>Tap to retry</Text>
+            </Pressable>
+          </View>
+        ) : loading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
         ) : (
           <View style={styles.groupGrid}>
             {groups.map((group, index) => {
@@ -126,51 +141,52 @@ export default function HomeScreen() {
               const positive = balance >= 0;
 
               return (
-                <Pressable
-                  key={group.id}
-                  onPress={() => router.push(`/group/${group.id}`)}
-                  style={({ pressed }) => [styles.groupPressable, pressed && { opacity: 0.9 }]}
-                >
-                  <Card style={[styles.groupCard, groups.length % 2 === 1 && index === groups.length - 1 && styles.groupCardWide]}>
-                    <View style={styles.groupCardTop}>
-                      <Text style={styles.groupEmoji}>{group.description?.slice(0, 2) || ['🏖', '🏠', '🍱', '🚀'][index % 4]}</Text>
-                      <View style={[styles.groupPill, positive ? styles.groupPillPositive : styles.groupPillNegative]}>
-                        <Text style={[styles.groupPillText, { color: positive ? Colors.secondary : Colors.danger }]}>
-                          {positive ? '+' : '-'}
-                          {formatMoney(balance).replace('₹ ', '₹')}
-                        </Text>
+                <Animated.View key={group.id} entering={FadeInDown.delay(index * 80)}>
+                  <Pressable
+                    onPress={() => router.push(`/group/${group.id}`)}
+                    style={({ pressed }) => [styles.groupPressable, pressed && { opacity: 0.9 }]}
+                  >
+                    <Card style={[styles.groupCard, groups.length % 2 === 1 && index === groups.length - 1 && styles.groupCardWide]}>
+                      <View style={styles.groupCardTop}>
+                        <Text style={styles.groupEmoji}>{group.description?.slice(0, 2) || ['🏖', '🏠', '🍱', '🚀'][index % 4]}</Text>
+                        <View style={[styles.groupPill, positive ? styles.groupPillPositive : styles.groupPillNegative]}>
+                          <Text style={[styles.groupPillText, { color: positive ? colors.secondary : colors.danger }]}>
+                            {positive ? '+' : '-'}
+                            {formatMoney(balance).replace('₹ ', '₹')}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                    <Text style={styles.groupName}>{group.name}</Text>
-                    <View style={styles.groupBottom}>
-                      <View style={styles.memberCluster}>
-                        {group.members.slice(0, 4).map((member, memberIndex) => (
-                          <View key={member.id} style={[styles.memberDot, { marginLeft: memberIndex === 0 ? 0 : -10 }]}>
-                            <Text style={styles.memberDotText}>
-                              {(member.user.name || member.user.phone).slice(0, 1).toUpperCase()}
-                            </Text>
-                          </View>
-                        ))}
-                        {group.members.length > 4 ? (
-                          <View style={[styles.memberDot, styles.memberDotMore]}>
-                            <Text style={styles.memberDotText}>+{group.members.length - 4}</Text>
-                          </View>
-                        ) : null}
+                      <Text style={[styles.groupName, { color: colors.textPrimary }]}>{group.name}</Text>
+                      <View style={styles.groupBottom}>
+                        <View style={styles.memberCluster}>
+                          {group.members.slice(0, 4).map((member, memberIndex) => (
+                            <View key={member.id} style={[styles.memberDot, { marginLeft: memberIndex === 0 ? 0 : -10, backgroundColor: colors.surfaceHigh, borderColor: colors.background }]}>
+                              <Text style={[styles.memberDotText, { color: colors.textSecondary }]}>
+                                {(member.user.name || member.user.phone).slice(0, 1).toUpperCase()}
+                              </Text>
+                            </View>
+                          ))}
+                          {group.members.length > 4 ? (
+                            <View style={[styles.memberDot, styles.memberDotMore, { backgroundColor: colors.surfaceHighest, borderColor: colors.background, marginLeft: -10 }]}>
+                              <Text style={[styles.memberDotText, { color: colors.textSecondary }]}>+{group.members.length - 4}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View style={styles.sparkline}>
+                          {[0.4, 0.65, 1, 0.3, 0.75, 0.5, 0.86].map((bar, barIndex) => (
+                            <View
+                              key={`${group.id}-${barIndex}`}
+                              style={[
+                                styles.sparkBar,
+                                { height: 10 + bar * 22, backgroundColor: positive ? colors.secondary : colors.danger, opacity: 0.25 + bar / 2 },
+                              ]}
+                            />
+                          ))}
+                        </View>
                       </View>
-                      <View style={styles.sparkline}>
-                        {[0.4, 0.65, 1, 0.3, 0.75, 0.5, 0.86].map((bar, barIndex) => (
-                          <View
-                            key={`${group.id}-${barIndex}`}
-                            style={[
-                              styles.sparkBar,
-                              { height: 10 + bar * 22, backgroundColor: positive ? Colors.secondary : Colors.danger, opacity: 0.25 + bar / 2 },
-                            ]}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  </Card>
-                </Pressable>
+                    </Card>
+                  </Pressable>
+                </Animated.View>
               );
             })}
           </View>
@@ -180,7 +196,7 @@ export default function HomeScreen() {
   );
 }
 
-function QuickAction({
+const QuickAction = React.memo(function QuickAction({
   icon,
   label,
   color,
@@ -191,15 +207,16 @@ function QuickAction({
   color: string;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [pressed && { opacity: 0.85 }]}>
       <Card style={styles.quickCard}>
         <MaterialIcons color={color} name={icon} size={20} />
-        <Text style={styles.quickLabel}>{label}</Text>
+        <Text style={[styles.quickLabel, { color: colors.textPrimary }]}>{label}</Text>
       </Card>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   scroll: {
@@ -210,7 +227,7 @@ const styles = StyleSheet.create({
   heroWrap: {
     borderRadius: Radius.xxl,
     padding: 1,
-    backgroundColor: Colors.primaryDim,
+    backgroundColor: 'transparent',
   },
   heroBorder: {
     borderRadius: Radius.xxl,
@@ -225,20 +242,17 @@ const styles = StyleSheet.create({
     ...Shadow.glowLg,
   },
   heroLabel: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '800',
     letterSpacing: 3,
   },
   heroAmount: {
-    color: Colors.secondary,
     fontSize: 58,
     fontWeight: '800',
     letterSpacing: -2,
     marginTop: Spacing.sm,
   },
   heroSub: {
-    color: 'rgba(233,234,248,0.6)',
     marginTop: Spacing.sm,
     fontSize: Typography.base,
   },
@@ -253,12 +267,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(11,14,23,0.45)',
     borderRadius: Radius.full,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
   },
   signalDot: {
     width: 6,
@@ -266,13 +278,11 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   statChipLabel: {
-    color: Colors.textSecondary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.4,
   },
   statChipValue: {
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '800',
   },
@@ -288,7 +298,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
   },
   quickLabel: {
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '700',
   },
@@ -299,12 +308,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.base,
   },
   sectionTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.xl,
     fontWeight: '800',
   },
   sectionAction: {
-    color: Colors.primary,
     fontSize: Typography.sm,
     fontWeight: '800',
     letterSpacing: 1.2,
@@ -351,7 +358,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
   },
   groupName: {
-    color: Colors.textPrimary,
     fontSize: Typography.lg,
     fontWeight: '800',
     marginBottom: Spacing.lg,
@@ -369,17 +375,13 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.surfaceHigh,
     borderWidth: 2,
-    borderColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   memberDotMore: {
-    backgroundColor: Colors.surfaceHighest,
   },
   memberDotText: {
-    color: Colors.textSecondary,
     fontSize: 10,
     fontWeight: '800',
   },

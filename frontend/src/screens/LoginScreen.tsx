@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AxiosError } from 'axios';
 import { AppBackdrop } from '../components/chrome';
 import { Button, Card, Input } from '../components/ui';
-import { Colors, Radius, Shadow, Spacing, Typography } from '../utils/theme';
+import { Radius, Shadow, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
 type Step = 'splash' | 'phone' | 'otp';
@@ -26,6 +27,7 @@ function getAuthErrorMessage(error: unknown, fallback: string) {
 export default function LoginScreen() {
   const router = useRouter();
   const { sendOTP, verifyOTP } = useAuthStore();
+  const { colors, isDark } = useTheme();
   const [step, setStep] = useState<Step>('splash');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -50,10 +52,12 @@ export default function LoginScreen() {
     setError('');
     try {
       const result = await sendOTP(`+91${cleanedPhone}`);
-      if (result.dev_otp) {
-        setOtp(String(result.dev_otp).split('').slice(0, 6));
-      }
       setStep('otp');
+      if (result.dev_otp) {
+        const devOtpValue = String(result.dev_otp).slice(0, 6);
+        setOtp(devOtpValue.split(''));
+        setTimeout(() => submitOtp(devOtpValue), 500);
+      }
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Failed to send OTP'));
     } finally {
@@ -91,46 +95,48 @@ export default function LoginScreen() {
   return (
     <AppBackdrop>
       {step === 'splash' ? (
-        <View style={styles.splash}>
-          <View style={styles.ringLarge} />
-          <View style={styles.ringMedium} />
-          <View style={styles.ringSmall} />
-          <View style={styles.logoDisc}>
-            <Text style={styles.logoGlyph}>S</Text>
-          </View>
-          <Text style={styles.brand}>SPLITSURE</Text>
-          <Text style={styles.brandSub}>NEURAL_NET_ALPHA_1.0</Text>
+        <Animated.View style={styles.splash} entering={FadeIn.duration(800)}>
+          <View style={[styles.ringLarge, { borderColor: isDark ? 'rgba(163,166,255,0.12)' : 'rgba(96,99,238,0.12)' }]} />
+          <View style={[styles.ringMedium, { borderColor: isDark ? 'rgba(163,166,255,0.18)' : 'rgba(96,99,238,0.18)' }]} />
+          <View style={[styles.ringSmall, { borderColor: isDark ? 'rgba(163,166,255,0.22)' : 'rgba(96,99,238,0.22)' }]} />
+          <Animated.View style={styles.logoDisc} entering={ZoomIn.duration(600).delay(200)}>
+            <Text style={[styles.logoGlyph, { color: colors.primary }]}>S</Text>
+          </Animated.View>
+          <Animated.Text style={[styles.brand, { color: colors.textPrimary }]} entering={FadeInDown.duration(500).delay(300)}>SPLITSURE</Animated.Text>
+          <Text style={[styles.brandSub, { color: isDark ? 'rgba(163,166,255,0.8)' : 'rgba(96,99,238,0.7)' }]}>NEURAL_NET_ALPHA_1.0</Text>
           <View style={styles.splashFeatures}>
-            {['Greedy-optimized settlements', 'Cryptographic proof vault', 'Immutable audit ledger'].map((feature) => (
-              <Card key={feature} style={styles.splashPill}>
-                <Text style={styles.splashPillText}>{feature}</Text>
-              </Card>
+            {['Greedy-optimized settlements', 'Cryptographic proof vault', 'Immutable audit ledger'].map((feature, i) => (
+              <Animated.View key={feature} entering={FadeInDown.duration(400).delay(400 + i * 100)}>
+                <Card key={feature} style={styles.splashPill}>
+                  <Text style={[styles.splashPillText, { color: colors.textSecondary }]}>{feature}</Text>
+                </Card>
+              </Animated.View>
             ))}
           </View>
           <View style={styles.progressWrap}>
-            <Text style={styles.progressLabel}>INITIALIZING SECURE SESSION...</Text>
+            <Text style={[styles.progressLabel, { color: isDark ? 'rgba(233,234,248,0.4)' : 'rgba(26,29,46,0.4)' }]}>INITIALIZING SECURE SESSION...</Text>
             <View style={styles.progressTrack}>
-              <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.progressFill} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} />
+              <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.progressFill} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} />
             </View>
           </View>
-        </View>
+        </Animated.View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.hero}>
-            <View style={styles.logoWrap}>
-              <Text style={styles.heroLogo}>S</Text>
+          <Animated.View style={styles.hero} entering={FadeInDown.duration(500)}>
+            <View style={[styles.logoWrap, { backgroundColor: isDark ? 'rgba(99,102,241,0.16)' : 'rgba(96,99,238,0.12)' }]}>
+              <Text style={[styles.heroLogo, { color: colors.primary }]}>S</Text>
             </View>
-            <Text style={styles.title}>SPLITSURE</Text>
-            <Text style={styles.subtitle}>Financial Truth. Cryptographic Proof.</Text>
-          </View>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>SPLITSURE</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Financial Truth. Cryptographic Proof.</Text>
+          </Animated.View>
 
-          <View style={styles.chipRow}>
+          <Animated.View style={styles.chipRow} entering={FadeInDown.duration(500).delay(100)}>
             {['Zero-Knowledge', 'Immutable Ledger', 'Bank-grade'].map((label) => (
               <Card key={label} style={styles.trustChip}>
-                <Text style={styles.trustChipText}>{label}</Text>
+                <Text style={[styles.trustChipText, { color: colors.textSecondary }]}>{label}</Text>
               </Card>
             ))}
-          </View>
+          </Animated.View>
 
           <Card style={styles.formCard}>
             {step === 'phone' ? (
@@ -144,15 +150,15 @@ export default function LoginScreen() {
                   }}
                   keyboardType="phone-pad"
                   placeholder="Enter mobile number"
-                  leftAddon={<Text style={styles.phonePrefix}>+91</Text>}
+                  leftAddon={<Text style={[styles.phonePrefix, { color: colors.primary }]}>+91</Text>}
                   error={error}
                 />
                 <Button title="SEND OTP" onPress={handleSendOtp} loading={loading} />
               </>
             ) : (
               <>
-                <Text style={styles.otpHeading}>Verify OTP</Text>
-                <Text style={styles.otpCopy}>Confirm the six-digit secure access code for +91 {cleanedPhone}</Text>
+                <Text style={[styles.otpHeading, { color: colors.textPrimary }]}>Verify OTP</Text>
+                <Text style={[styles.otpCopy, { color: colors.textSecondary }]}>Confirm the six-digit secure access code for +91 {cleanedPhone}</Text>
                 <View style={styles.otpRow}>
                   {otp.map((digit, index) => (
                     <TextInput
@@ -164,18 +170,18 @@ export default function LoginScreen() {
                       onChangeText={(value) => setOtpDigit(value, index)}
                       keyboardType="number-pad"
                       maxLength={1}
-                      style={styles.otpBox}
+                      style={[styles.otpBox, { backgroundColor: colors.surfaceLowest, borderColor: colors.ghostBorder, color: colors.textPrimary }]}
                     />
                   ))}
                 </View>
-                {error ? <Text style={styles.error}>{error}</Text> : null}
+                {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
                 <Button title="VERIFY & CONTINUE" onPress={() => submitOtp()} loading={loading} />
                 <Pressable onPress={() => setStep('phone')} style={{ marginTop: Spacing.base }}>
-                  <Text style={styles.changeNumber}>Change number</Text>
+                  <Text style={[styles.changeNumber, { color: colors.primary }]}>Change number</Text>
                 </Pressable>
               </>
             )}
-            <Text style={styles.terms}>
+            <Text style={[styles.terms, { color: colors.textMuted }]}>
               By continuing, you agree to the Sovereign Protocols and Audit Terms.
             </Text>
           </Card>
@@ -199,7 +205,6 @@ const styles = StyleSheet.create({
     borderRadius: 160,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(163,166,255,0.12)',
   },
   ringMedium: {
     position: 'absolute',
@@ -208,7 +213,6 @@ const styles = StyleSheet.create({
     borderRadius: 110,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(163,166,255,0.18)',
   },
   ringSmall: {
     position: 'absolute',
@@ -217,34 +221,26 @@ const styles = StyleSheet.create({
     borderRadius: 70,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(163,166,255,0.22)',
   },
   logoDisc: {
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: Colors.glass,
-    borderWidth: 1,
-    borderColor: Colors.ghostBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Shadow.glowMd,
   },
   logoGlyph: {
-    color: Colors.primary,
     fontSize: 64,
     fontWeight: '800',
     marginTop: -8,
   },
   brand: {
-    color: Colors.textPrimary,
     fontSize: 46,
     fontWeight: '800',
     letterSpacing: 8,
     marginTop: Spacing.xxxl,
   },
   brandSub: {
-    color: 'rgba(163,166,255,0.8)',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 3,
@@ -261,7 +257,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   splashPillText: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
   },
   progressWrap: {
@@ -271,7 +266,6 @@ const styles = StyleSheet.create({
     right: Spacing.xl,
   },
   progressLabel: {
-    color: 'rgba(233,234,248,0.4)',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 3,
@@ -281,7 +275,6 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: 2,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.06)',
     overflow: 'hidden',
   },
   progressFill: {
@@ -302,25 +295,20 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 24,
-    backgroundColor: 'rgba(99,102,241,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
-    ...Shadow.glowMd,
   },
   heroLogo: {
-    color: Colors.primary,
     fontSize: 46,
     fontWeight: '800',
   },
   title: {
-    color: Colors.textPrimary,
     fontSize: 42,
     fontWeight: '800',
     letterSpacing: 6,
     marginTop: Spacing.xl,
   },
   subtitle: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     marginTop: 8,
   },
@@ -337,7 +325,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   trustChipText: {
-    color: Colors.textSecondary,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.4,
@@ -348,18 +335,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xxl,
   },
   phonePrefix: {
-    color: Colors.primary,
     fontSize: Typography.base,
     fontWeight: '700',
   },
   otpHeading: {
-    color: Colors.textPrimary,
     fontSize: Typography.xl,
     fontWeight: '800',
     marginBottom: 8,
   },
   otpCopy: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     marginBottom: Spacing.base,
   },
@@ -373,26 +357,20 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceLowest,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
-    color: Colors.textPrimary,
     textAlign: 'center',
     fontSize: Typography.xl,
     fontWeight: '800',
   },
   error: {
-    color: Colors.danger,
     marginBottom: Spacing.base,
   },
   changeNumber: {
-    color: Colors.primary,
     fontSize: Typography.sm,
     fontWeight: '700',
     textAlign: 'center',
   },
   terms: {
-    color: Colors.textMuted,
     fontSize: 11,
     textAlign: 'center',
     marginTop: Spacing.base,
