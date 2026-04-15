@@ -3,11 +3,12 @@ import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { groupsAPI } from '../../src/services/api';
 import { useAuthStore } from '../../src/store/authStore';
-import { Colors, Spacing, Typography, Radius, Shadow } from '../../src/utils/theme';
+import { Spacing, Typography, Radius, Shadow, useTheme } from '../../src/utils/theme';
 import { Button, Card } from '../../src/components/ui';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function JoinGroupScreen() {
+  const { colors, isDark } = useTheme();
   const { token } = useLocalSearchParams<{ token: string }>();
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
@@ -44,22 +45,22 @@ export default function JoinGroupScreen() {
 
   if (authLoading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator color={Colors.primary} size="large" />
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} size="large" />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Card style={styles.card}>
         {success ? (
           <>
             <View style={styles.iconWrap}>
-              <MaterialIcons color={Colors.secondary} name="check-circle" size={64} />
+              <MaterialIcons color={colors.secondary} name="check-circle" size={64} />
             </View>
-            <Text style={styles.title}>Welcome!</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Welcome!</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               You've successfully joined {groupName}. Expenses and settlements are now shared.
             </Text>
             <Button
@@ -71,13 +72,13 @@ export default function JoinGroupScreen() {
         ) : (
           <>
             <View style={styles.iconWrap}>
-              <MaterialIcons color={Colors.primary} name="group-add" size={64} />
+              <MaterialIcons color={colors.primary} name="group-add" size={64} />
             </View>
-            <Text style={styles.title}>Join Group</Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>Join Group</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
               You've been invited to join a SplitSure group. Tap below to accept.
             </Text>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
             <Button
               title="Accept Invite"
               onPress={handleJoin}
@@ -100,7 +101,6 @@ export default function JoinGroupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
     justifyContent: 'center',
     alignItems: 'center',
     padding: Spacing.xl,
@@ -115,19 +115,16 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   title: {
-    color: Colors.textPrimary,
     fontSize: Typography.xl,
     fontWeight: '800',
     marginBottom: Spacing.sm,
   },
   subtitle: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     textAlign: 'center',
     lineHeight: 22,
   },
   error: {
-    color: Colors.danger,
     fontSize: Typography.sm,
     marginTop: Spacing.base,
     textAlign: 'center',

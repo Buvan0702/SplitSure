@@ -4,10 +4,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
-import { Avatar, Badge, Button, Card, Input } from '../components/ui';
-import { auditAPI, expensesAPI, groupsAPI, settlementsAPI } from '../services/api';
+import { Avatar, Badge, Button, Card, Input, EmptyState, StatusBadge } from '../components/ui';
+import { auditAPI, expensesAPI, groupsAPI, settlementsAPI, getApiErrorMessage } from '../services/api';
 import { AuditLog, Expense, Group, GroupBalances } from '../types';
-import { Colors, Radius, Shadow, Spacing, Typography } from '../utils/theme';
+import { Radius, Shadow, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
 type GroupTab = 'expenses' | 'balances' | 'audit';
@@ -17,7 +17,7 @@ const categoryStyles: Record<string, { bg: string; text: string; icon: keyof typ
   transport: { bg: 'rgba(96,165,250,0.15)', text: '#60A5FA', icon: 'local-taxi' },
   accommodation: { bg: 'rgba(168,85,247,0.15)', text: '#A855F7', icon: 'hotel' },
   utilities: { bg: 'rgba(250,204,21,0.15)', text: '#FACC15', icon: 'flash-on' },
-  misc: { bg: 'rgba(163,166,255,0.15)', text: Colors.primary, icon: 'receipt-long' },
+  misc: { bg: 'rgba(163,166,255,0.15)', text: '#A3A6FF', icon: 'receipt-long' },
 };
 
 export default function GroupDetailScreen() {
@@ -25,6 +25,7 @@ export default function GroupDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const { colors, isDark } = useTheme();
   const [tab, setTab] = useState<GroupTab>('expenses');
   const [showAddMember, setShowAddMember] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -51,13 +52,15 @@ export default function GroupDetailScreen() {
     },
   });
 
+  const EXPENSE_PAGE_SIZE = 20;
+
   const expensesQuery = useQuery({
     queryKey: ['expenses', id, debouncedSearch, filterCategory],
     queryFn: async () => {
-      const params: { search?: string; category?: string } = {};
+      const params: { search?: string; category?: string; limit?: number; offset?: number } = {};
       if (debouncedSearch) params.search = debouncedSearch;
       if (filterCategory) params.category = filterCategory;
-      const { data } = await expensesAPI.list(Number(id), params);
+      const { data } = await expensesAPI.list(Number(id), { ...params, limit: EXPENSE_PAGE_SIZE, offset: 0 });
       return data as Expense[];
     },
   });
@@ -89,8 +92,8 @@ export default function GroupDetailScreen() {
       setMemberPhone('');
       setMemberError('');
     },
-    onError: (error: any) => {
-      setMemberError(error?.response?.data?.detail || 'Failed to add member');
+    onError: (error: unknown) => {
+      setMemberError(getApiErrorMessage(error, 'Failed to add member'));
     },
   });
 
@@ -102,8 +105,8 @@ export default function GroupDetailScreen() {
       setShowSettings(false);
       setGroupError('');
     },
-    onError: (error: any) => {
-      setGroupError(error?.response?.data?.detail || 'Failed to update group');
+    onError: (error: unknown) => {
+      setGroupError(getApiErrorMessage(error, 'Failed to update group'));
     },
   });
 
@@ -113,8 +116,8 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['group', id] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
     },
-    onError: (error: any) => {
-      Alert.alert('Unable to remove member', error?.response?.data?.detail || 'Failed to remove member');
+    onError: (error: unknown) => {
+      Alert.alert('Unable to remove member', getApiErrorMessage(error, 'Failed to remove member'));
     },
   });
 
@@ -124,8 +127,8 @@ export default function GroupDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       router.replace('/(tabs)/groups');
     },
-    onError: (error: any) => {
-      Alert.alert('Unable to archive group', error?.response?.data?.detail || 'Failed to archive group');
+    onError: (error: unknown) => {
+      Alert.alert('Unable to archive group', getApiErrorMessage(error, 'Failed to archive group'));
     },
   });
 
@@ -139,8 +142,8 @@ export default function GroupDetailScreen() {
         Alert.alert('Invite ready', message);
       }
     },
-    onError: (error: any) => {
-      Alert.alert('Unable to create invite', error?.response?.data?.detail || 'Failed to create invite');
+    onError: (error: unknown) => {
+      Alert.alert('Unable to create invite', getApiErrorMessage(error, 'Failed to create invite'));
     },
   });
 
@@ -159,9 +162,20 @@ export default function GroupDetailScreen() {
     setShowSettings(true);
   };
 
+  const closeAddMemberModal = () => {
+    setShowAddMember(false);
+    setMemberPhone('');
+    setMemberError('');
+  };
+
+  const closeSettingsModal = () => {
+    setShowSettings(false);
+    setGroupError('');
+  };
+
   const title = (
     <View>
-      <Text style={styles.groupHeading}>{groupQuery.data?.name || 'GROUP'}</Text>
+      <Text style={[styles.groupHeading, { color: colors.textPrimary }]}>{groupQuery.data?.name || 'GROUP'}</Text>
       <View style={{ marginTop: 4 }}>
         <Badge label={isAdmin ? 'Admin Mode Active' : 'Audit Shield Active'} />
       </View>
@@ -172,13 +186,21 @@ export default function GroupDetailScreen() {
     <AppBackdrop>
       <TopBar title={title} userName={user?.name || user?.phone} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {groupQuery.isError ? (
+          <View style={{ alignItems: 'center', padding: 20 }}>
+            <Text style={{ color: colors.danger, fontSize: 14, textAlign: 'center' }}>Failed to load group</Text>
+            <Pressable onPress={() => groupQuery.refetch()} style={{ marginTop: 8 }}>
+              <Text style={{ color: colors.primary, fontSize: 14 }}>Tap to retry</Text>
+            </Pressable>
+          </View>
+        ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberStrip}>
           {memberBalances.length ? memberBalances.map(({ member, net }) => {
             const positive = net >= 0;
             const isCurrentUser = member.user.id === user?.id;
 
             return (
-              <Card key={member.id} style={[styles.memberCard, isCurrentUser && styles.memberCardActive]}>
+              <Card key={member.id} style={[styles.memberCard, isCurrentUser && { borderColor: colors.ghostBorderStrong, ...styles.memberCardActive }]}>
                 {isAdmin && !isCurrentUser ? (
                   <Pressable
                     onPress={() => Alert.alert('Remove member', `Remove ${member.user.name || member.user.phone} from this group?`, [
@@ -187,25 +209,27 @@ export default function GroupDetailScreen() {
                     ])}
                     style={styles.memberRemove}
                   >
-                    <MaterialIcons color={Colors.textPrimary} name="close" size={14} />
+                    <MaterialIcons color={colors.textPrimary} name="close" size={14} />
                   </Pressable>
                 ) : null}
                 <Avatar name={member.user.name || member.user.phone} size={40} />
-                <Text style={[styles.memberName, isCurrentUser && { color: Colors.primary }]}>
+                <Text style={[styles.memberName, { color: colors.textSecondary }, isCurrentUser && { color: colors.primary }]}>
                   {isCurrentUser ? 'YOU' : (member.user.name || member.user.phone).split(' ')[0].toUpperCase()}
                 </Text>
-                <Text style={[styles.memberRole, member.role === 'admin' && { color: Colors.primary }]}>
+                <Text style={[styles.memberRole, { color: colors.textMuted }, member.role === 'admin' && { color: colors.primary }]}>
                   {member.role.toUpperCase()}
                 </Text>
-                <Text style={[styles.memberNet, { color: positive ? Colors.secondary : Colors.danger }]}>
+                <StatusBadge status={member.is_registered === false ? 'not_registered' : 'active'} size="sm" />
+                <Text style={[styles.memberNet, { color: positive ? colors.secondary : colors.danger }]}>
                   {positive ? '+' : '-'}{Math.abs(net / 100).toFixed(0)}
                 </Text>
               </Card>
             );
           }) : (
-            <ActivityIndicator color={Colors.primary} />
+            <ActivityIndicator color={colors.primary} />
           )}
         </ScrollView>
+        )}
 
         {isAdmin ? (
           <View style={styles.actionRow}>
@@ -215,16 +239,16 @@ export default function GroupDetailScreen() {
           </View>
         ) : null}
 
-        <View style={styles.tabSwitcher}>
+        <View style={[styles.tabSwitcher, { backgroundColor: colors.glass, borderColor: colors.ghostBorder }]}>
           {(['expenses', 'balances', 'audit'] as GroupTab[]).map((item) => {
             const label = item === 'expenses' ? 'Expenses' : item === 'balances' ? 'Balances' : 'Audit Trail';
             const icon = item === 'expenses' ? 'bolt' : item === 'balances' ? 'account-balance' : 'manage-search';
             const active = item === tab;
 
             return (
-              <Pressable key={item} onPress={() => setTab(item)} style={[styles.tabPill, active && styles.tabPillActive]}>
-                <MaterialIcons color={active ? Colors.primaryInk : 'rgba(233,234,248,0.5)'} name={icon} size={16} />
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>{label}</Text>
+              <Pressable key={item} onPress={() => setTab(item)} style={[styles.tabPill, active && { backgroundColor: colors.primary, ...styles.tabPillActive }]}>
+                <MaterialIcons color={active ? colors.primaryInk : colors.textMuted} name={icon} size={16} />
+                <Text style={[styles.tabText, { color: active ? colors.primaryInk : colors.textMuted }]}>{label}</Text>
               </Pressable>
             );
           })}
@@ -237,7 +261,7 @@ export default function GroupDetailScreen() {
               value={searchText}
               onChangeText={setSearchText}
               placeholder="Search expenses..."
-              leftAddon={<MaterialIcons name="search" size={18} color={Colors.textMuted} />}
+              leftAddon={<MaterialIcons name="search" size={18} color={colors.textMuted} />}
             />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: Spacing.base }}>
               {[undefined, 'food', 'transport', 'accommodation', 'utilities', 'misc'].map((cat) => {
@@ -247,15 +271,17 @@ export default function GroupDetailScreen() {
                   <Pressable
                     key={cat || 'all'}
                     onPress={() => setFilterCategory(cat)}
-                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    style={[styles.filterChip, { backgroundColor: colors.surfaceLowest, borderColor: colors.ghostBorder }, active && { backgroundColor: colors.primaryLight, borderColor: colors.ghostBorderStrong }]}
                   >
-                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
+                    <Text style={[styles.filterChipText, { color: active ? colors.primary : colors.textSecondary }]}>{label}</Text>
                   </Pressable>
                 );
               })}
             </ScrollView>
             {expensesQuery.isLoading ? (
-              <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
+              <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
+            ) : expensesQuery.data?.length === 0 ? (
+              <EmptyState icon="📋" title="No expenses yet" subtitle="Add your first expense to get started" />
             ) : (
               expensesQuery.data?.map((expense) => {
                 const visual = categoryStyles[expense.category] || categoryStyles.misc;
@@ -271,19 +297,19 @@ export default function GroupDetailScreen() {
                       </View>
                       <View style={styles.expenseBody}>
                         <View style={styles.expenseTop}>
-                          <Text style={styles.expenseTitle}>{expense.description}</Text>
-                          <Text style={styles.expenseAmount}>₹{(expense.amount / 100).toFixed(0)}</Text>
+                          <Text style={[styles.expenseTitle, { color: colors.textPrimary }]}>{expense.description}</Text>
+                          <Text style={[styles.expenseAmount, { color: colors.textPrimary }]}>₹{(expense.amount / 100).toFixed(0)}</Text>
                         </View>
                         <View style={styles.expenseBottom}>
-                          <Text style={styles.expenseMeta}>
+                          <Text style={[styles.expenseMeta, { color: colors.textTertiary }]}>
                             Paid by {expense.paid_by_user.name || expense.paid_by_user.phone} • {expense.split_type.toUpperCase()}
                           </Text>
                           {expense.is_disputed ? (
-                            <Text style={[styles.statusChip, { color: Colors.danger }]}>DISPUTED</Text>
+                            <Text style={[styles.statusChip, { color: colors.danger }]}>DISPUTED</Text>
                           ) : expense.proof_attachments.length ? (
                             <Text style={styles.statusChip}>PROOF</Text>
                           ) : (
-                            <Text style={[styles.statusChip, { color: Colors.warning }]}>PENDING</Text>
+                            <Text style={[styles.statusChip, { color: colors.warning }]}>PENDING</Text>
                           )}
                         </View>
                       </View>
@@ -299,13 +325,13 @@ export default function GroupDetailScreen() {
           <View style={styles.section}>
             <Pressable onPress={() => router.push(`/settlements?groupId=${id}`)}>
               <Card>
-                <Text style={styles.panelTitle}>Settlement Command</Text>
-                <Text style={styles.panelCopy}>Open the full balance matrix and complete pending payment confirmations.</Text>
+                <Text style={[styles.panelTitle, { color: colors.textPrimary }]}>Settlement Command</Text>
+                <Text style={[styles.panelCopy, { color: colors.textSecondary }]}>Open the full balance matrix and complete pending payment confirmations.</Text>
                 {(balancesQuery.data?.optimized_settlements || []).slice(0, 3).map((instruction, index) => (
                   <View key={`${instruction.payer_id}-${index}`} style={styles.inlineTransfer}>
-                    <Text style={styles.inlineTransferText}>{instruction.payer_name}</Text>
-                    <Text style={styles.inlineTransferAmount}>₹{(instruction.amount / 100).toFixed(0)}</Text>
-                    <Text style={styles.inlineTransferText}>{instruction.receiver_name}</Text>
+                    <Text style={[styles.inlineTransferText, { color: colors.textPrimary }]}>{instruction.payer_name}</Text>
+                    <Text style={[styles.inlineTransferAmount, { color: colors.secondary }]}>₹{(instruction.amount / 100).toFixed(0)}</Text>
+                    <Text style={[styles.inlineTransferText, { color: colors.textPrimary }]}>{instruction.receiver_name}</Text>
                   </View>
                 ))}
               </Card>
@@ -317,12 +343,12 @@ export default function GroupDetailScreen() {
           <View style={styles.section}>
             <Pressable onPress={() => router.push(`/audit?groupId=${id}`)}>
               <Card>
-                <Text style={styles.panelTitle}>Immutable Audit Ledger</Text>
-                <Text style={styles.panelCopy}>Recent tamper-evident events from this group.</Text>
+                <Text style={[styles.panelTitle, { color: colors.textPrimary }]}>Immutable Audit Ledger</Text>
+                <Text style={[styles.panelCopy, { color: colors.textSecondary }]}>Recent tamper-evident events from this group.</Text>
                 {(auditQuery.data || []).map((event) => (
                   <View key={event.id} style={styles.auditRow}>
-                    <Text style={styles.auditType}>{event.event_type.replaceAll('_', ' ').toUpperCase()}</Text>
-                    <Text style={styles.auditMeta}>{event.actor.name || event.actor.phone}</Text>
+                    <Text style={[styles.auditType, { color: colors.textPrimary }]}>{event.event_type.replaceAll('_', ' ').toUpperCase()}</Text>
+                    <Text style={[styles.auditMeta, { color: colors.textSecondary }]}>{event.actor.name || event.actor.phone}</Text>
                   </View>
                 ))}
               </Card>
@@ -331,16 +357,16 @@ export default function GroupDetailScreen() {
         ) : null}
       </ScrollView>
 
-      <Pressable onPress={() => router.push(`/add-expense?groupId=${id}`)} style={styles.fab}>
-        <MaterialIcons color={Colors.primaryInk} name="add" size={30} />
+      <Pressable onPress={() => router.push(`/add-expense?groupId=${id}`)} style={[styles.fab, { backgroundColor: colors.primary }]}>
+        <MaterialIcons color={colors.primaryInk} name="add" size={30} />
       </Pressable>
       <FloatingDock current="groups" />
 
       <Modal animationType="slide" transparent visible={showAddMember}>
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add Member</Text>
-            <Text style={styles.modalCopy}>In dev mode, adding a new phone number will create a placeholder account automatically.</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Add Member</Text>
+            <Text style={[styles.modalCopy, { color: colors.textSecondary }]}>In dev mode, adding a new phone number will create a placeholder account automatically.</Text>
             <Input
               label="Phone Number"
               value={memberPhone}
@@ -353,7 +379,7 @@ export default function GroupDetailScreen() {
               keyboardType="phone-pad"
             />
             <View style={styles.modalActions}>
-              <Button title="Cancel" onPress={() => setShowAddMember(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button title="Cancel" onPress={closeAddMemberModal} style={{ flex: 1 }} variant="ghost" />
               <Button title="Add" onPress={() => addMember.mutate()} style={{ flex: 1.3 }} loading={addMember.isPending} />
             </View>
           </Card>
@@ -361,9 +387,9 @@ export default function GroupDetailScreen() {
       </Modal>
 
       <Modal animationType="slide" transparent visible={showSettings}>
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Group Settings</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Group Settings</Text>
             <Input
               label="Group Name"
               value={groupName}
@@ -381,7 +407,7 @@ export default function GroupDetailScreen() {
               placeholder="Optional description"
             />
             <View style={styles.modalActions}>
-              <Button title="Close" onPress={() => setShowSettings(false)} style={{ flex: 1 }} variant="ghost" />
+              <Button title="Close" onPress={closeSettingsModal} style={{ flex: 1 }} variant="ghost" />
               <Button title="Save" onPress={() => updateGroup.mutate()} style={{ flex: 1.2 }} loading={updateGroup.isPending} />
             </View>
             <Button
@@ -408,7 +434,6 @@ const styles = StyleSheet.create({
     paddingBottom: 170,
   },
   groupHeading: {
-    color: Colors.textPrimary,
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -0.8,
@@ -426,7 +451,6 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
   },
   memberCardActive: {
-    borderColor: Colors.ghostBorderStrong,
     ...Shadow.glowSm,
   },
   memberRemove: {
@@ -441,13 +465,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   memberName: {
-    color: Colors.textSecondary,
     fontSize: 10,
     fontWeight: '800',
     marginTop: 8,
   },
   memberRole: {
-    color: Colors.textMuted,
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 1,
@@ -466,9 +488,7 @@ const styles = StyleSheet.create({
   tabSwitcher: {
     flexDirection: 'row',
     borderRadius: Radius.full,
-    backgroundColor: Colors.glass,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
     padding: 6,
     gap: 6,
     marginBottom: Spacing.xl,
@@ -483,15 +503,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tabPillActive: {
-    backgroundColor: Colors.primary,
   },
   tabText: {
-    color: 'rgba(233,234,248,0.5)',
     fontSize: 11,
     fontWeight: '700',
   },
   tabTextActive: {
-    color: Colors.primaryInk,
   },
   section: {
     gap: Spacing.md,
@@ -518,12 +535,10 @@ const styles = StyleSheet.create({
   },
   expenseTitle: {
     flex: 1,
-    color: Colors.textPrimary,
     fontSize: Typography.lg,
     fontWeight: '800',
   },
   expenseAmount: {
-    color: Colors.textPrimary,
     fontSize: Typography.md,
     fontWeight: '800',
   },
@@ -536,23 +551,19 @@ const styles = StyleSheet.create({
   },
   expenseMeta: {
     flex: 1,
-    color: 'rgba(233,234,248,0.45)',
     fontSize: 12,
   },
   statusChip: {
-    color: Colors.secondary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.1,
   },
   panelTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.lg,
     fontWeight: '800',
     marginBottom: 8,
   },
   panelCopy: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     marginBottom: Spacing.lg,
   },
@@ -562,12 +573,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   inlineTransferText: {
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '700',
   },
   inlineTransferAmount: {
-    color: Colors.secondary,
     fontSize: Typography.base,
     fontWeight: '800',
   },
@@ -575,13 +584,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   auditType: {
-    color: Colors.textPrimary,
     fontSize: Typography.sm,
     fontWeight: '800',
     letterSpacing: 1,
   },
   auditMeta: {
-    color: Colors.textSecondary,
     marginTop: 4,
   },
   fab: {
@@ -591,7 +598,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.glowMd,
@@ -599,20 +605,17 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: Colors.overlay,
     padding: Spacing.base,
   },
   modalCard: {
     marginBottom: Spacing.lg,
   },
   modalTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.xl,
     fontWeight: '800',
     marginBottom: 8,
   },
   modalCopy: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     marginBottom: Spacing.lg,
   },
@@ -624,21 +627,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceLowest,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
     marginRight: Spacing.sm,
   },
   filterChipActive: {
-    backgroundColor: 'rgba(163,166,255,0.15)',
-    borderColor: 'rgba(163,166,255,0.3)',
   },
   filterChipText: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '700',
   },
   filterChipTextActive: {
-    color: Colors.primary,
   },
 });
