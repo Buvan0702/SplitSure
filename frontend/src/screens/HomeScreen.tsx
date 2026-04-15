@@ -61,7 +61,7 @@ export default function HomeScreen() {
 
   return (
     <AppBackdrop>
-      <TopBar title={<BrandWordmark compact />} userName={user?.name || user?.phone} />
+      <TopBar title={<BrandWordmark compact />} userName={user?.name || user?.phone} hideRightIcon />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeInDown.duration(400)} style={[styles.heroWrap, { backgroundColor: colors.primaryDim }]}>
           <View style={styles.heroBorder}>

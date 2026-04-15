@@ -63,6 +63,7 @@ export function TopBar({
   userName,
   rightIcon = 'settings',
   onRightPress,
+  hideRightIcon = false,
 }: {
   leftIcon?: keyof typeof MaterialIcons.glyphMap;
   onLeftPress?: () => void;
@@ -71,23 +72,24 @@ export function TopBar({
   userName?: string | null;
   rightIcon?: keyof typeof MaterialIcons.glyphMap;
   onRightPress?: () => void;
+  hideRightIcon?: boolean;
 }) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[
-      styles.topBar, 
-      { 
+      styles.topBar,
+      {
         paddingTop: insets.top + 8,
-        backgroundColor: isDark 
-          ? 'rgba(11,14,23,0.82)' 
+        backgroundColor: isDark
+          ? 'rgba(11,14,23,0.82)'
           : 'rgba(245,246,250,0.88)',
       }
     ]}>
       <View style={styles.topSide}>
         {leftIcon ? (
-          <Pressable onPress={onLeftPress} style={[styles.iconButton, { borderColor: colors.ghostBorder }]} accessibilityLabel="Go back" accessibilityRole="button">
+          <Pressable onPress={onLeftPress} style={[styles.iconButton, { borderColor: colors.ghostBorder }]}>
             <MaterialIcons color={colors.primary} name={leftIcon} size={22} />
           </Pressable>
         ) : null}
@@ -98,9 +100,11 @@ export function TopBar({
       </View>
 
       <View style={styles.topRight}>
-        <Pressable onPress={onRightPress} style={[styles.iconButton, { borderColor: colors.ghostBorder }]}>
-          <MaterialIcons color={colors.textSecondary} name={rightIcon} size={20} />
-        </Pressable>
+        {!hideRightIcon && (
+          <Pressable onPress={onRightPress} style={[styles.iconButton, { borderColor: colors.ghostBorder }]}>
+            <MaterialIcons color={colors.textSecondary} name={rightIcon} size={20} />
+          </Pressable>
+        )}
         <Avatar name={userName || 'User'} size={40} />
       </View>
     </View>
