@@ -10,11 +10,16 @@ import { Radius, Shadow, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
 type Step = 'splash' | 'phone' | 'otp';
+const OTP_LENGTH = 6;
 
 function getAuthErrorMessage(error: unknown, fallback: string) {
-  const axiosError = error as AxiosError<{ detail?: string }>;
-  const detail = axiosError.response?.data?.detail;
+  const axiosError = error as AxiosError<{ detail?: string } | string>;
+  const responseData = axiosError.response?.data;
+  const detail = typeof responseData === 'string' ? responseData : responseData?.detail;
   if (typeof detail === 'string' && detail.trim()) return detail;
+  if (axiosError.response?.status && axiosError.response.status >= 500) {
+    return 'Server error during OTP verification. Please try again after backend redeploy.';
+  }
   if (axiosError.code === 'ECONNABORTED') {
     return 'Server is waking up. Please wait a moment and try again.';
   }
@@ -30,7 +35,7 @@ export default function LoginScreen() {
   const { colors, isDark } = useTheme();
   const [step, setStep] = useState<Step>('splash');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState<string[]>(Array.from({ length: OTP_LENGTH }, () => ''));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const otpRefs = useRef<Array<TextInput | null>>([]);
@@ -41,6 +46,48 @@ export default function LoginScreen() {
   }, []);
 
   const cleanedPhone = phone.replace(/\D/g, '');
+
+  useEffect(() => {
+    if (step !== 'otp') return;
+    const timer = setTimeout(() => otpRefs.current[0]?.focus(), 150);
+    return () => clearTimeout(timer);
+  }, [step]);
+
+  const submitOtp = async (code = otp.join('')) => {
+    const normalizedCode = code.replace(/\D/g, '').slice(0, OTP_LENGTH);
+    if (normalizedCode.length !== OTP_LENGTH) {
+      setError('Enter the full 6-digit OTP');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      await verifyOTP(`+91${cleanedPhone}`, normalizedCode);
+      router.replace('/(tabs)');
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Failed to verify OTP'));
+      setOtp(Array.from({ length: OTP_LENGTH }, () => ''));
+      otpRefs.current[0]?.focus();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fillOtpFromCode = (rawCode: string) => {
+    const digits = rawCode.replace(/\D/g, '').slice(0, OTP_LENGTH);
+    if (!digits) return;
+
+    const next = Array.from({ length: OTP_LENGTH }, (_, i) => digits[i] ?? '');
+    setOtp(next);
+
+    if (digits.length === OTP_LENGTH) {
+      void submitOtp(digits);
+      return;
+    }
+
+    otpRefs.current[Math.min(digits.length, OTP_LENGTH - 1)]?.focus();
+  };
 
   const handleSendOtp = async () => {
     if (cleanedPhone.length !== 10) {
@@ -54,9 +101,8 @@ export default function LoginScreen() {
       const result = await sendOTP(`+91${cleanedPhone}`);
       setStep('otp');
       if (result.dev_otp) {
-        const devOtpValue = String(result.dev_otp).slice(0, 6);
-        setOtp(devOtpValue.split(''));
-        setTimeout(() => submitOtp(devOtpValue), 500);
+        const devOtpValue = String(result.dev_otp).slice(0, OTP_LENGTH);
+        setTimeout(() => fillOtpFromCode(devOtpValue), 150);
       }
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Failed to send OTP'));
@@ -65,31 +111,34 @@ export default function LoginScreen() {
     }
   };
 
-  const submitOtp = async (code = otp.join('')) => {
-    if (code.length !== 6) {
-      setError('Enter the full 6-digit OTP');
+  const setOtpDigit = (value: string, index: number) => {
+    const digitsOnly = value.replace(/\D/g, '');
+
+    if (digitsOnly.length > 1) {
+      const next = [...otp];
+      for (let offset = 0; offset < digitsOnly.length && index + offset < OTP_LENGTH; offset += 1) {
+        next[index + offset] = digitsOnly[offset];
+      }
+
+      setOtp(next);
+
+      if (next.every(Boolean)) {
+        void submitOtp(next.join(''));
+        return;
+      }
+
+      const nextEmptyIndex = next.findIndex((digit) => !digit);
+      if (nextEmptyIndex >= 0) {
+        otpRefs.current[nextEmptyIndex]?.focus();
+      }
       return;
     }
 
-    setLoading(true);
-    setError('');
-    try {
-      await verifyOTP(`+91${cleanedPhone}`, code);
-      router.replace('/(tabs)');
-    } catch (err) {
-      setError(getAuthErrorMessage(err, 'Invalid OTP'));
-      setOtp(['', '', '', '', '', '']);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const setOtpDigit = (value: string, index: number) => {
     const next = [...otp];
-    next[index] = value.slice(-1);
+    next[index] = digitsOnly.slice(-1);
     setOtp(next);
-    if (value && index < 5) otpRefs.current[index + 1]?.focus();
-    if (next.every(Boolean)) submitOtp(next.join(''));
+    if (digitsOnly && index < OTP_LENGTH - 1) otpRefs.current[index + 1]?.focus();
+    if (next.every(Boolean)) void submitOtp(next.join(''));
   };
 
   return (
@@ -168,8 +217,16 @@ export default function LoginScreen() {
                       }}
                       value={digit}
                       onChangeText={(value) => setOtpDigit(value, index)}
+                      onKeyPress={({ nativeEvent }) => {
+                        if (nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+                          otpRefs.current[index - 1]?.focus();
+                        }
+                      }}
                       keyboardType="number-pad"
-                      maxLength={1}
+                      textContentType={index === 0 ? 'oneTimeCode' : undefined}
+                      autoComplete={index === 0 ? 'sms-otp' : 'off'}
+                      importantForAutofill={index === 0 ? 'yes' : 'no'}
+                      maxLength={index === 0 ? OTP_LENGTH : 1}
                       style={[styles.otpBox, { backgroundColor: colors.surfaceLowest, borderColor: colors.ghostBorder, color: colors.textPrimary }]}
                     />
                   ))}

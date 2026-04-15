@@ -70,6 +70,10 @@ async def create_database_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(text("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS push_token VARCHAR(500)
+        """))
+        await conn.execute(text("""
             CREATE OR REPLACE FUNCTION prevent_audit_log_mutation()
             RETURNS TRIGGER AS $$
             BEGIN
