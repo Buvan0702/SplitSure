@@ -102,8 +102,6 @@ def enableProguardInReleaseBuilds = (findProperty('android.enableProguardInRelea
  * this variant is about 6MiB larger per architecture than default.
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
-def apkDistDir = new File(projectRoot, "dist")
-def releaseApkName = "SplitSure-Release-v1.0.0.apk"
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -117,7 +115,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0.0"
+        versionName "1.1"
     }
     signingConfigs {
         debug {
@@ -146,21 +144,6 @@ android {
             useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)
         }
     }
-}
-
-tasks.register("copyDebugApkToDist", Copy) {
-    dependsOn("assembleDebug")
-    from(layout.buildDirectory.dir("outputs/apk/debug"))
-    include("app-debug.apk")
-    into(apkDistDir)
-}
-
-tasks.register("copyReleaseApkToDist", Copy) {
-    dependsOn("assembleRelease")
-    from(layout.buildDirectory.dir("outputs/apk/release"))
-    include("app-release.apk")
-    rename("app-release.apk", releaseApkName)
-    into(apkDistDir)
 }
 
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
