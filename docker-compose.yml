@@ -17,6 +17,14 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── Redis (token blacklist, caching) ─────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+
   # ─── FastAPI Backend ──────────────────────────────────────────────
   api:
     build:
@@ -29,6 +37,8 @@ services:
       # Database
       DATABASE_URL: "postgresql+asyncpg://splitsure:splitsure_dev@db:5432/splitsure"
 
+      # Redis
+      REDIS_URL: "redis://redis:6379"
 
       # Security
       SECRET_KEY: "${SECRET_KEY:-dev-secret-key-change-in-production-use-32-chars-min}"
@@ -59,6 +69,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ./backend:/app            # hot-reload source
       - uploads_data:/app/uploads # persisted proof files on local disk

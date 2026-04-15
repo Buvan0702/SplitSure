@@ -13,6 +13,7 @@ from app.schemas.schemas import (
     InviteLinkOut, GroupMemberOut
 )
 from app.services.audit_service import log_event
+from app.services.push_service import notify_group_invite
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -156,12 +157,17 @@ async def add_member(
     # Find user by phone
     result = await db.execute(select(User).where(User.phone == body.phone))
     new_user = result.scalar_one_or_none()
+    is_registered = True  # Default to registered
     if not new_user:
         if not settings.USE_DEV_OTP:
             raise HTTPException(404, "User with this phone number not found")
         new_user = User(phone=body.phone)
         db.add(new_user)
         await db.flush()
+        is_registered = False  # Auto-created user is not registered
+    else:
+        # User exists - check if they have a name (properly registered)
+        is_registered = new_user.name is not None
 
     existing = await _get_member(db, group_id, new_user.id)
     if existing:
@@ -169,6 +175,9 @@ async def add_member(
 
     member = GroupMember(group_id=group_id, user_id=new_user.id, role=MemberRole.MEMBER)
     db.add(member)
+
+    # Get group info for notification
+    group = await _load_group(db, group_id)
 
     await log_event(
         db, group_id, AuditEventType.MEMBER_ADDED, current_user.id,
@@ -183,7 +192,19 @@ async def add_member(
         .where(GroupMember.group_id == group_id)
         .where(GroupMember.user_id == new_user.id)
     )
-    return result.scalar_one()
+    member_record = result.scalar_one()
+
+    # Send push notification to the added user (fire-and-forget)
+    inviter_name = current_user.name or current_user.phone
+    await notify_group_invite(db, new_user.id, group.name, inviter_name)
+
+    return GroupMemberOut(
+        id=member_record.id,
+        user=member_record.user,
+        role=member_record.role,
+        joined_at=member_record.joined_at,
+        is_registered=is_registered,
+    )
 
 
 @router.delete("/{group_id}/members/{user_id}", status_code=204)
@@ -273,7 +294,27 @@ async def join_via_invite(
         .where(GroupMember.group_id == invite.group_id)
         .where(GroupMember.user_id == current_user.id)
     )
-    return result.scalar_one()
+    member_record = result.scalar_one()
+
+    # Notify group admins about the new member (fire-and-forget)
+    group = await _load_group(db, invite.group_id)
+    joiner_name = current_user.name or current_user.phone
+    for m in group.members:
+        if m.role == MemberRole.ADMIN and m.user_id != current_user.id:
+            await notify_group_invite(
+                db, m.user_id, group.name, f"{joiner_name} joined"
+            )
+
+    # Determine if the joining user is registered
+    is_registered = current_user.name is not None
+
+    return GroupMemberOut(
+        id=member_record.id,
+        user=member_record.user,
+        role=member_record.role,
+        joined_at=member_record.joined_at,
+        is_registered=is_registered,
+    )
 
 
 @router.delete("/{group_id}", status_code=204)

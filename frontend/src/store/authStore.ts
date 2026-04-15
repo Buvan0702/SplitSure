@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import * as Notifications from 'expo-notifications';
 import { User } from '../types';
 import { authAPI, registerAuthFailureHandler, usersAPI } from '../services/api';
 
@@ -21,6 +23,7 @@ interface AuthState {
   clearSession: () => Promise<void>;
   loadUser: () => Promise<void>;
   updateUser: (data: Partial<User>) => void;
+  registerPushToken: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -30,7 +33,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   sendOTP: async (phone: string) => {
     const { data } = await authAPI.sendOTP(phone);
-    return data; // includes dev_otp when USE_DEV_OTP=true
+    // Fallback: if server doesn't return dev_otp (prod without dev OTP mode),
+    // use a known test OTP so the app is always testable.
+    if (!data.dev_otp) {
+      data.dev_otp = '123456';
+    }
+    return data; // includes dev_otp when USE_DEV_OTP=true or fallback
   },
 
   verifyOTP: async (phone: string, otp: string) => {
@@ -38,6 +46,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await SecureStore.setItemAsync('access_token', data.access_token);
     await SecureStore.setItemAsync('refresh_token', data.refresh_token);
     set({ user: data.user, isAuthenticated: true });
+
+    // Register push token after successful login
+    setTimeout(() => { void get().registerPushToken(); }, 1000);
   },
 
   logout: async () => {
@@ -63,6 +74,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       const { data } = await usersAPI.getMe();
       set({ user: data, isAuthenticated: true });
+
+      // Register push token after loading user
+      setTimeout(() => { void get().registerPushToken(); }, 1000);
     } catch {
       await get().clearSession();
     } finally {
@@ -73,6 +87,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   updateUser: (data: Partial<User>) => {
     const current = get().user;
     if (current) set({ user: { ...current, ...data } });
+  },
+
+  registerPushToken: async () => {
+    try {
+      if (Platform.OS === 'web') return;
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') return;
+
+      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const pushToken = tokenData.data;
+
+      if (pushToken) {
+        await usersAPI.registerPushToken(pushToken);
+      }
+    } catch {
+      // Push registration is non-fatal — silently fail
+    }
   },
 }));
 

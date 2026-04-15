@@ -14,15 +14,17 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppBackdrop, TopBar } from '../components/chrome';
 import { Button, Card, Input } from '../components/ui';
-import { groupsAPI } from '../services/api';
+import { groupsAPI, getApiErrorMessage } from '../services/api';
 import { Group } from '../types';
-import { Colors, Radius, Spacing, Typography } from '../utils/theme';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Radius, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
 export default function GroupsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const { colors, isDark } = useTheme();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -48,8 +50,8 @@ export default function GroupsScreen() {
       setDescription('');
       setNameError('');
     },
-    onError: (error: any) => {
-      setNameError(error?.response?.data?.detail || 'Failed to create group');
+    onError: (error: unknown) => {
+      setNameError(getApiErrorMessage(error, 'Failed to create group'));
     },
   });
 
@@ -62,8 +64,8 @@ export default function GroupsScreen() {
       setInviteError('');
       Alert.alert('Joined group successfully');
     },
-    onError: (error: any) => {
-      setInviteError(error?.response?.data?.detail || 'Failed to join group');
+    onError: (error: unknown) => {
+      setInviteError(getApiErrorMessage(error, 'Failed to join group'));
     },
   });
 
@@ -79,48 +81,50 @@ export default function GroupsScreen() {
 
       <ScrollView
         contentContainerStyle={styles.scroll}
-        refreshControl={<RefreshControl refreshing={groupsQuery.isLoading} onRefresh={groupsQuery.refetch} tintColor={Colors.primary} />}
+        refreshControl={<RefreshControl refreshing={groupsQuery.isLoading} onRefresh={groupsQuery.refetch} tintColor={colors.primary} />}
       >
-        <Text style={styles.overline}>NETWORKED POOLS</Text>
-        <Text style={styles.title}>Precision group ledgers for every shared mission.</Text>
+        <Text style={[styles.overline, { color: colors.textSecondary }]}>NETWORKED POOLS</Text>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>Precision group ledgers for every shared mission.</Text>
 
         {groupsQuery.isLoading ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
         ) : (
           groupsQuery.data?.map((group, index) => (
             <Pressable key={group.id} onPress={() => router.push(`/group/${group.id}`)} style={({ pressed }) => [pressed && { opacity: 0.9 }]}>
+              <Animated.View entering={FadeInDown.delay(index * 80).duration(400).springify()}>
               <Card style={styles.groupCard}>
                 <View style={styles.groupTop}>
-                  <View style={styles.logoDisc}>
+                  <View style={[styles.logoDisc, { backgroundColor: colors.chip }]}>
                     <Text style={styles.logoText}>{['🏖', '🏠', '🍱', '🚀'][index % 4]}</Text>
                   </View>
-                  <View style={styles.memberCount}>
-                    <Text style={styles.memberCountText}>{group.members.length} MEMBERS</Text>
+                  <View style={[styles.memberCount, { borderColor: colors.ghostBorder, backgroundColor: colors.chip }]}>
+                    <Text style={[styles.memberCountText, { color: colors.textSecondary }]}>{group.members.length} MEMBERS</Text>
                   </View>
                 </View>
-                <Text style={styles.groupName}>{group.name}</Text>
-                {group.description ? <Text style={styles.groupDescription}>{group.description}</Text> : null}
+                <Text style={[styles.groupName, { color: colors.textPrimary }]}>{group.name}</Text>
+                {group.description ? <Text style={[styles.groupDescription, { color: colors.textSecondary }]}>{group.description}</Text> : null}
                 <View style={styles.memberRow}>
                   {group.members.slice(0, 5).map((member, memberIndex) => (
-                    <View key={member.id} style={[styles.memberBadge, { marginLeft: memberIndex === 0 ? 0 : -10 }]}>
-                      <Text style={styles.memberBadgeText}>
+                    <View key={member.id} style={[styles.memberBadge, { backgroundColor: colors.surfaceHighest, borderColor: colors.background, marginLeft: memberIndex === 0 ? 0 : -10 }]}>
+                      <Text style={[styles.memberBadgeText, { color: colors.textSecondary }]}>
                         {(member.user.name || member.user.phone).slice(0, 1).toUpperCase()}
                       </Text>
                     </View>
                   ))}
-                  <Text style={styles.tapHint}>Open ledger</Text>
+                  <Text style={[styles.tapHint, { color: colors.textMuted }]}>Open ledger</Text>
                 </View>
               </Card>
+              </Animated.View>
             </Pressable>
           ))
         )}
       </ScrollView>
 
       <Modal animationType="slide" transparent visible={showCreate}>
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Create New Group</Text>
-            <Text style={styles.modalSub}>Only the fields shown in the live interface are included.</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Create New Group</Text>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>Only the fields shown in the live interface are included.</Text>
             <Input
               label="Group Name"
               value={name}
@@ -147,10 +151,10 @@ export default function GroupsScreen() {
       </Modal>
 
       <Modal animationType="slide" transparent visible={showJoin}>
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Join Group</Text>
-            <Text style={styles.modalSub}>Paste the invite token shared by your group admin.</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Join Group</Text>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>Paste the invite token shared by your group admin.</Text>
             <Input
               label="Invite Token"
               value={inviteToken}
@@ -181,14 +185,12 @@ const styles = StyleSheet.create({
     paddingBottom: 140,
   },
   overline: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '800',
     letterSpacing: 3,
     marginBottom: Spacing.sm,
   },
   title: {
-    color: Colors.textPrimary,
     fontSize: 32,
     lineHeight: 38,
     fontWeight: '800',
@@ -209,7 +211,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   logoText: {
     fontSize: 26,
@@ -219,23 +220,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
-    backgroundColor: Colors.chip,
   },
   memberCountText: {
-    color: Colors.textSecondary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.3,
   },
   groupName: {
-    color: Colors.textPrimary,
     fontSize: Typography.xl,
     fontWeight: '800',
     marginBottom: 6,
   },
   groupDescription: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     lineHeight: 20,
     marginBottom: Spacing.lg,
@@ -248,39 +244,32 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: Colors.surfaceHighest,
     borderWidth: 2,
-    borderColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   memberBadgeText: {
-    color: Colors.textSecondary,
     fontSize: 11,
     fontWeight: '800',
   },
   tapHint: {
     marginLeft: 'auto',
-    color: Colors.textMuted,
     fontSize: Typography.sm,
   },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: Colors.overlay,
     padding: Spacing.base,
   },
   modalCard: {
     marginBottom: Spacing.lg,
   },
   modalTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.xl,
     fontWeight: '800',
     marginBottom: 8,
   },
   modalSub: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     marginBottom: Spacing.lg,
   },

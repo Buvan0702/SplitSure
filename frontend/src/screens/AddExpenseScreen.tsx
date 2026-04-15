@@ -4,24 +4,19 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
 import { Button, Card, Input } from '../components/ui';
-import { expensesAPI, groupsAPI } from '../services/api';
+import { expensesAPI, groupsAPI, getApiErrorMessage } from '../services/api';
 import { ExpenseCategory, Group, SplitType } from '../types';
-import { Colors, Radius, Spacing, Typography } from '../utils/theme';
-
-const categories: Array<{ value: ExpenseCategory; label: string }> = [
-  { value: 'food', label: 'Food' },
-  { value: 'transport', label: 'Transport' },
-  { value: 'accommodation', label: 'Hotel' },
-  { value: 'utilities', label: 'Utilities' },
-  { value: 'misc', label: 'Entertainment' },
-];
+import { Radius, Spacing, Typography, useTheme } from '../utils/theme';
+import { EXPENSE_CATEGORIES } from '../utils/helpers';
 
 export default function AddExpenseScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { colors, isDark } = useTheme();
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -91,6 +86,8 @@ export default function AddExpenseScreen() {
 
       if (proofFile) {
         const formData = new FormData();
+        // React Native FormData accepts {uri, name, type} objects for file uploads
+        // TypeScript's lib.dom FormData types don't include this, so we cast
         formData.append(
           'file',
           {
@@ -109,8 +106,8 @@ export default function AddExpenseScreen() {
       queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
       router.back();
     },
-    onError: (error: any) => {
-      Alert.alert(error?.message || error?.response?.data?.detail || 'Failed to create expense');
+    onError: (error: unknown) => {
+      Alert.alert(getApiErrorMessage(error, 'Failed to create expense'));
     },
   });
 
@@ -127,108 +124,120 @@ export default function AddExpenseScreen() {
     <AppBackdrop>
       <TopBar leftIcon="arrow-back" onLeftPress={() => router.back()} title="SPLITSURE" subtitle="Expense Architect" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.amountHero}>
-          <Text style={styles.amountLabel}>Transaction Value</Text>
-          <View style={styles.amountRow}>
-            <Text style={styles.currency}>₹</Text>
+        <Animated.View entering={FadeInDown.delay(100).springify()}>
+          <View style={styles.amountHero}>
+            <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>Transaction Value</Text>
+            <View style={styles.amountRow}>
+              <Text style={[styles.currency, { color: colors.textPrimary }]}>₹</Text>
+              <Input
+                containerStyle={{ flex: 1, marginBottom: 0 }}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                style={styles.amountInput}
+              />
+            </View>
+          </View>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(200).springify()}>
+          <Card style={styles.detailCard}>
             <Input
-              containerStyle={{ flex: 1, marginBottom: 0 }}
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              style={styles.amountInput}
+              label="Floating Description"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="GALAXY GATE DINNER & STAY"
             />
-          </View>
-        </View>
+            <Text style={[styles.sectionOverline, { color: colors.textSecondary }]}>Expense Category</Text>
+            <View style={styles.chipWrap}>
+              {EXPENSE_CATEGORIES.map((item) => {
+                const active = item.value === category;
+                return (
+                  <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, active && styles.categoryChipActive, { backgroundColor: active ? colors.successLight : colors.surfaceLowest, borderColor: active ? colors.success : colors.ghostBorder }]}>
+                    <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive, { color: active ? colors.success : colors.textSecondary }]}>{item.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Card>
+        </Animated.View>
 
-        <Card style={styles.detailCard}>
-          <Input
-            label="Floating Description"
-            value={description}
-            onChangeText={setDescription}
-            placeholder="GALAXY GATE DINNER & STAY"
-          />
-          <Text style={styles.sectionOverline}>Expense Category</Text>
-          <View style={styles.chipWrap}>
-            {categories.map((item) => {
-              const active = item.value === category;
-              return (
-                <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, active && styles.categoryChipActive]}>
-                  <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{item.label}</Text>
-                </Pressable>
-              );
-            })}
+        <Animated.View entering={FadeInDown.delay(300).springify()}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionOverline, { color: colors.textSecondary }]}>Split Mode</Text>
+            <View style={[styles.toggle, { backgroundColor: colors.surface, borderColor: colors.ghostBorder }]}>
+              {(['equal', 'exact', 'percentage'] as SplitType[]).map((value) => {
+                const active = value === splitType;
+                return (
+                  <Pressable key={value} onPress={() => setSplitType(value)} style={[styles.toggleChip, active && styles.toggleChipActive, { backgroundColor: active ? colors.primary : 'transparent' }]}>
+                    <Text style={[styles.toggleText, active && styles.toggleTextActive, { color: active ? colors.primaryInk : colors.textSecondary }]}>{value === 'percentage' ? 'PERCENT' : value.toUpperCase()}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </Card>
+        </Animated.View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionOverline}>Split Mode</Text>
-          <View style={styles.toggle}>
-            {(['equal', 'exact', 'percentage'] as SplitType[]).map((value) => {
-              const active = value === splitType;
-              return (
-                <Pressable key={value} onPress={() => setSplitType(value)} style={[styles.toggleChip, active && styles.toggleChipActive]}>
-                  <Text style={[styles.toggleText, active && styles.toggleTextActive]}>{value === 'percentage' ? 'PERCENT' : value.toUpperCase()}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        <Card style={styles.memberTable}>
-          {(groupQuery.data?.members || []).map((member) => (
-            <View key={member.id} style={styles.memberRow}>
-              <View>
-                <Text style={styles.memberName}>{member.user.name || member.user.phone}</Text>
-                <Text style={styles.memberRole}>{member.role}</Text>
+        <Animated.View entering={FadeInDown.delay(400).springify()}>
+          <Card style={styles.memberTable}>
+            {(groupQuery.data?.members || []).map((member) => (
+              <View key={member.id} style={[styles.memberRow, { borderBottomColor: colors.border }]}>
+                <View>
+                  <Text style={[styles.memberName, { color: colors.textPrimary }]}>{member.user.name || member.user.phone}</Text>
+                  <Text style={[styles.memberRole, { color: colors.textSecondary }]}>{member.role}</Text>
+                </View>
+                {splitType === 'equal' ? (
+                  <Text style={[styles.memberValue, { color: colors.secondary }]}>
+                    ₹{groupQuery.data?.members.length ? (amountValue / Math.max(groupQuery.data.members.length, 1) / 100).toFixed(2) : '0.00'}
+                  </Text>
+                ) : null}
+                {splitType === 'exact' ? (
+                  <Input
+                    containerStyle={{ marginBottom: 0, width: 110 }}
+                    value={exactAmounts[member.user.id] || ''}
+                    onChangeText={(value) => setExactAmounts((current) => ({ ...current, [member.user.id]: value }))}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                  />
+                ) : null}
+                {splitType === 'percentage' ? (
+                  <Input
+                    containerStyle={{ marginBottom: 0, width: 110 }}
+                    value={percentages[member.user.id] || ''}
+                    onChangeText={(value) => setPercentages((current) => ({ ...current, [member.user.id]: value }))}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    rightAddon={<Text style={styles.memberRole}>%</Text>}
+                  />
+                ) : null}
               </View>
-              {splitType === 'equal' ? (
-                <Text style={styles.memberValue}>
-                  ₹{groupQuery.data?.members.length ? (amountValue / Math.max(groupQuery.data.members.length, 1) / 100).toFixed(2) : '0.00'}
-                </Text>
-              ) : null}
-              {splitType === 'exact' ? (
-                <Input
-                  containerStyle={{ marginBottom: 0, width: 110 }}
-                  value={exactAmounts[member.user.id] || ''}
-                  onChangeText={(value) => setExactAmounts((current) => ({ ...current, [member.user.id]: value }))}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                />
-              ) : null}
-              {splitType === 'percentage' ? (
-                <Input
-                  containerStyle={{ marginBottom: 0, width: 110 }}
-                  value={percentages[member.user.id] || ''}
-                  onChangeText={(value) => setPercentages((current) => ({ ...current, [member.user.id]: value }))}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  rightAddon={<Text style={styles.memberRole}>%</Text>}
-                />
-              ) : null}
-            </View>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        </Animated.View>
 
-        <Card style={styles.vaultCard}>
-          <View style={styles.vaultHeader}>
-            <Text style={styles.vaultTitle}>PROOF VAULT</Text>
-            <Text style={styles.vaultSeal}>TAMPER-PROOF</Text>
-          </View>
-          <View style={styles.vaultGrid}>
-            <Pressable onPress={pickProof} style={styles.uploadZone}>
-              <MaterialIcons color={Colors.textSecondary} name="photo-camera" size={28} />
-              <Text style={styles.uploadText}>{proofFile ? proofFile.name : 'Add Invoice Proof'}</Text>
-            </Pressable>
-            <View style={styles.proofMeta}>
-              <Text style={styles.proofHash}>{proofFile ? 'Proof selected and queued for lock' : 'No proof attached yet'}</Text>
-              <Text style={styles.proofTime}>Attachment is uploaded after the expense is created.</Text>
+        <Animated.View entering={FadeInDown.delay(500).springify()}>
+          <Card style={styles.vaultCard}>
+            <View style={styles.vaultHeader}>
+              <Text style={[styles.vaultTitle, { color: colors.textPrimary }]}>PROOF VAULT</Text>
+              <Text style={[styles.vaultSeal, { color: colors.secondary }]}>TAMPER-PROOF</Text>
             </View>
-          </View>
-        </Card>
+            <View style={styles.vaultGrid}>
+              <Pressable onPress={pickProof} style={[styles.uploadZone, { borderColor: colors.ghostBorderStrong, backgroundColor: colors.chip }]}>
+                <MaterialIcons color={colors.textSecondary} name="photo-camera" size={28} />
+                <Text style={[styles.uploadText, { color: colors.textSecondary }]}>{proofFile ? proofFile.name : 'Add Invoice Proof'}</Text>
+              </Pressable>
+              <View style={[styles.proofMeta, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.proofHash, { color: colors.textPrimary }]}>{proofFile ? 'Proof selected and queued for lock' : 'No proof attached yet'}</Text>
+                <Text style={[styles.proofTime, { color: colors.textSecondary }]}>Attachment is uploaded after the expense is created.</Text>
+              </View>
+            </View>
+          </Card>
+        </Animated.View>
 
-        <Button title="LOCK EXPENSE TO LEDGER" onPress={() => createExpense.mutate()} loading={createExpense.isPending} />
+        <Animated.View entering={FadeInDown.delay(600).springify()}>
+          <Button title="LOCK EXPENSE TO LEDGER" onPress={() => createExpense.mutate()} loading={createExpense.isPending} />
+        </Animated.View>
       </ScrollView>
       <FloatingDock current="activity" />
     </AppBackdrop>
@@ -246,7 +255,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xl,
   },
   amountLabel: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '800',
     letterSpacing: 3,
@@ -258,7 +266,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   currency: {
-    color: Colors.textPrimary,
     fontSize: 48,
     fontWeight: '300',
     marginRight: 8,
@@ -272,7 +279,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   sectionOverline: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '800',
     letterSpacing: 2,
@@ -288,21 +294,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceLowest,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
   },
   categoryChipActive: {
-    backgroundColor: 'rgba(29,251,165,0.1)',
-    borderColor: 'rgba(29,251,165,0.2)',
   },
   categoryChipText: {
-    color: Colors.textSecondary,
     fontSize: Typography.sm,
     fontWeight: '700',
   },
   categoryChipTextActive: {
-    color: Colors.secondary,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -313,10 +313,8 @@ const styles = StyleSheet.create({
   },
   toggle: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
     padding: 4,
   },
   toggleChip: {
@@ -325,16 +323,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   toggleChipActive: {
-    backgroundColor: Colors.primary,
   },
   toggleText: {
-    color: Colors.textSecondary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.2,
   },
   toggleTextActive: {
-    color: Colors.primaryInk,
   },
   memberTable: {
     paddingVertical: 0,
@@ -348,15 +343,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingVertical: Spacing.base,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
   memberName: {
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '700',
   },
   memberRole: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -364,7 +356,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   memberValue: {
-    color: Colors.secondary,
     fontSize: Typography.base,
     fontWeight: '800',
   },
@@ -378,12 +369,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   vaultTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.lg,
     fontWeight: '800',
   },
   vaultSeal: {
-    color: Colors.secondary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.5,
@@ -396,30 +385,24 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 2,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.14)',
   },
   uploadText: {
-    color: Colors.textSecondary,
     fontSize: Typography.sm,
     fontWeight: '700',
   },
   proofMeta: {
-    backgroundColor: Colors.surface,
     borderRadius: Radius.md,
     padding: Spacing.base,
   },
   proofHash: {
-    color: Colors.textPrimary,
     fontSize: Typography.sm,
     fontWeight: '700',
     marginBottom: 6,
   },
   proofTime: {
-    color: Colors.textSecondary,
     fontSize: Typography.sm,
   },
 });

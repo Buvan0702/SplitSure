@@ -2,14 +2,30 @@
   "expo": {
     "name": "SplitSure",
     "slug": "splitsure",
-    "version": "1.0.0",
+    "version": "1.1",
     "scheme": "splitsure",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "plugins": ["expo-router"],
     "android": {
       "package": "com.splitsure.app",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "splitsure",
+              "host": "*"
+            }
+          ],
+          "category": ["DEFAULT", "BROWSABLE"]
+        }
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.splitsure.app"
     }
   }
 }

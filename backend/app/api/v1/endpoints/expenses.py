@@ -97,11 +97,11 @@ def _expense_to_dict(expense: Expense) -> dict:
 def _build_expense_out(expense: Expense) -> dict:
     """Attach presigned URLs to proof attachments."""
     expense_dict = ExpenseOut.model_validate(expense).model_dump()
+    attachment_map = {att.id: att for att in expense.proof_attachments}
     for proof in expense_dict.get("proof_attachments", []):
-        # Look up s3_key from original model
-        for att in expense.proof_attachments:
-            if att.id == proof["id"]:
-                proof["presigned_url"] = generate_presigned_url(att.s3_key)
+        att = attachment_map.get(proof["id"])
+        if att:
+            proof["presigned_url"] = generate_presigned_url(att.s3_key)
     return expense_dict
 
 
@@ -184,6 +184,8 @@ async def list_expenses(
     group_id: int,
     category: Optional[ExpenseCategory] = None,
     search: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -204,8 +206,12 @@ async def list_expenses(
     if category:
         query = query.where(Expense.category == category)
     if search:
+        search = search.strip()
+        if len(search) > 255:
+            raise HTTPException(400, "Search query too long (max 255 characters)")
         query = query.where(Expense.description.ilike(f"%{search}%"))
 
+    query = query.limit(limit).offset(offset)
     result = await db.execute(query)
     return [_build_expense_out(expense) for expense in result.scalars().all()]
 

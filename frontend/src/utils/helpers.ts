@@ -1,56 +1,49 @@
-import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
+import { Alert } from 'react-native';
+import { getApiErrorMessage } from '../services/api';
+import type { ExpenseCategory } from '../types';
 
-/** Convert paise to rupee display string */
-export function formatRupees(paise: number, decimals = 2): string {
-  const rupees = paise / 100;
-  return `₹${rupees.toLocaleString('en-IN', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })}`;
+/**
+ * Standard error handler for React Query mutation onError callbacks.
+ * Usage: onError: (error) => handleApiError(error, 'Failed to create group')
+ */
+export function handleApiError(error: unknown, fallback: string): void {
+  Alert.alert('Error', getApiErrorMessage(error, fallback));
 }
 
-/** Format date smartly — "Today", "Yesterday", or "12 Jan 2025" */
-export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  if (isToday(date)) return `Today, ${format(date, 'HH:mm')}`;
-  if (isYesterday(date)) return `Yesterday, ${format(date, 'HH:mm')}`;
-  return format(date, 'dd MMM yyyy');
+/**
+ * Format paise amount to display string (e.g., 15050 → "₹150.50")
+ */
+export function formatPaise(paise: number): string {
+  const rupees = Math.floor(Math.abs(paise) / 100);
+  const remainder = Math.abs(paise) % 100;
+  const sign = paise < 0 ? '-' : '';
+  return `${sign}₹${rupees}.${String(remainder).padStart(2, '0')}`;
 }
 
-/** Short relative time */
-export function timeAgo(dateStr: string): string {
-  return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
-}
+/**
+ * Shared expense category definitions.
+ * Used by AddExpenseScreen and EditExpenseScreen.
+ */
+export const EXPENSE_CATEGORIES: Array<{ value: ExpenseCategory; label: string }> = [
+  { value: 'food', label: 'Food' },
+  { value: 'transport', label: 'Transport' },
+  { value: 'accommodation', label: 'Hotel' },
+  { value: 'utilities', label: 'Utilities' },
+  { value: 'misc', label: 'Entertainment' },
+];
 
-/** Mask phone for display */
-export function maskPhone(phone: string): string {
-  if (phone.length < 10) return phone;
-  return phone.slice(0, -6) + '••••' + phone.slice(-2);
-}
-
-/** Get display name with fallback */
-export function displayName(user: { name?: string | null; phone: string }): string {
-  return user.name || user.phone;
-}
-
-/** Generate UPI deep link */
-export function buildUPILink(upiId: string, name: string, amountPaise: number, note: string): string {
-  const amount = (amountPaise / 100).toFixed(2);
-  const encodedNote = encodeURIComponent(note);
-  const encodedName = encodeURIComponent(name);
-  return `upi://pay?pa=${upiId}&pn=${encodedName}&am=${amount}&tn=${encodedNote}&cu=INR`;
-}
-
-/** Clamp a number between min/max */
-export function clamp(val: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, val));
-}
-
-/** Debounce function */
-export function debounce<T extends (...args: any[]) => any>(fn: T, delay: number) {
-  let timer: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-}
+/**
+ * Standardized React Query key factories.
+ * Convention: [entity] or [entity, id] or [entity, id, sub-entity]
+ */
+export const QueryKeys = {
+  groups: () => ['groups'] as const,
+  group: (id: number) => ['group', id] as const,
+  expenses: (groupId: number) => ['expenses', groupId] as const,
+  expense: (groupId: number, expenseId: number) => ['expense', groupId, expenseId] as const,
+  balances: (groupId: number) => ['balances', groupId] as const,
+  homeBalances: () => ['home-balances'] as const,
+  settlements: (groupId: number) => ['settlements', groupId] as const,
+  audit: (groupId: number) => ['audit', groupId] as const,
+  recentExpenses: (userId: number) => ['recent-expenses', userId] as const,
+} as const;

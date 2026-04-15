@@ -25,6 +25,7 @@ export interface GroupMember {
   user: User;
   role: MemberRole;
   joined_at: string;
+  is_registered?: boolean;  // Whether the member has completed registration
 }
 
 export interface Group {
@@ -150,3 +151,24 @@ export const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   utilities: '#FFD93D',
   misc: '#A8A8A8',
 };
+
+// ─── Phone Registration ──────────────────────────────────────────────────────
+export interface PhoneCheckResult {
+  registered: boolean;
+  user_name: string | null;
+}
+
+// ─── Theme ───────────────────────────────────────────────────────────────────
+export type ThemeMode = 'dark' | 'light';
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+export type NotificationType = 'group_invite' | 'settlement_initiated' | 'settlement_confirmed' | 'settlement_disputed' | 'expense_created' | 'member_added' | 'general';
+
+export interface InAppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+}

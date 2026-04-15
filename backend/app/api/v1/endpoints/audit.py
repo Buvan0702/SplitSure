@@ -13,7 +13,7 @@ router = APIRouter(prefix="/groups/{group_id}/audit", tags=["audit"])
 @router.get("", response_model=list[AuditLogOut])
 async def get_audit_log(
     group_id: int,
-    limit: int = Query(50, le=200),
+    limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

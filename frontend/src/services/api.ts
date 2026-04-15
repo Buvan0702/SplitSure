@@ -3,6 +3,16 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { ExpenseCategory, SplitType } from '../types';
 
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof AxiosError) {
+    return error.response?.data?.detail || fallback;
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+}
+
 const DEFAULT_DEV_API_URL = 'https://splitsure.onrender.com/api/v1';
 const DEFAULT_PROD_API_URL = 'https://splitsure.onrender.com/api/v1';
 const API_TIMEOUT_MS = 60000;
@@ -163,17 +173,26 @@ export const usersAPI = {
   getMe: () => api.get('/users/me'),
   updateMe: (data: { name?: string; email?: string; upi_id?: string }) =>
     api.patch('/users/me', data),
+  uploadAvatar: (formData: FormData) =>
+    api.post('/users/me/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  registerPushToken: (push_token: string) =>
+    api.post('/users/me/push-token', { push_token }),
+  checkPhoneRegistration: (phone: string) =>
+    api.post('/users/check-phone', { phone }).then(res => res.data),
 };
 
 // ── Groups ────────────────────────────────────────────────────────────────
 export const groupsAPI = {
-  list: () => api.get('/groups'),
+  list: (params?: { include_archived?: boolean }) => api.get('/groups', { params }),
   get: (id: number) => api.get(`/groups/${id}`),
   create: (data: { name: string; description?: string }) =>
     api.post('/groups', data),
   update: (id: number, data: { name?: string; description?: string }) =>
     api.patch(`/groups/${id}`, data),
   archive: (id: number) => api.delete(`/groups/${id}`),
+  unarchive: (id: number) => api.post(`/groups/${id}/unarchive`),
   addMember: (groupId: number, phone: string) =>
     api.post(`/groups/${groupId}/members`, { phone }),
   removeMember: (groupId: number, userId: number) =>
@@ -184,7 +203,7 @@ export const groupsAPI = {
 
 // ── Expenses ──────────────────────────────────────────────────────────────
 export const expensesAPI = {
-  list: (groupId: number, params?: { category?: string; search?: string }) =>
+  list: (groupId: number, params?: { category?: string; search?: string; limit?: number; offset?: number }) =>
     api.get(`/groups/${groupId}/expenses`, { params }),
   get: (groupId: number, id: number) =>
     api.get(`/groups/${groupId}/expenses/${id}`),
