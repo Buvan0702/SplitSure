@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 import hashlib
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.core.database import get_db
 from app.core.security import (
     create_access_token, create_refresh_token, decode_token,
@@ -23,13 +24,16 @@ def _hash_otp(otp: str) -> str:
 async def _check_rate_limit(db: AsyncSession, phone: str):
     one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
     result = await db.execute(
-        select(OTPRecord)
+        select(func.count(OTPRecord.id))
         .where(OTPRecord.phone == phone)
         .where(OTPRecord.created_at >= one_hour_ago)
     )
-    count = len(result.scalars().all())
+    count = result.scalar() or 0
     if count >= settings.OTP_MAX_REQUESTS_PER_HOUR:
         raise HTTPException(429, "Too many OTP requests. Try again in an hour.")
+
+
+logger = logging.getLogger("splitsure.auth")
 
 
 async def _send_sms_otp(phone: str, otp: str):
@@ -47,8 +51,8 @@ async def _send_sms_otp(phone: str, otp: str):
                 },
                 timeout=10.0,
             )
-    except httpx.RequestError:
-        pass
+    except httpx.RequestError as e:
+        logger.error(f"SMS delivery failed for phone {phone[-4:]}: {e}")
 
 
 @router.post("/send-otp")

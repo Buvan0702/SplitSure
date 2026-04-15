@@ -112,6 +112,25 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PhoneCheckRequest(BaseModel):
+    phone: str
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        v = v.strip().replace(" ", "")
+        if not v.startswith("+"):
+            v = "+91" + v
+        if len(v) < 10:
+            raise ValueError("Invalid phone number")
+        return v
+
+
+class PhoneCheckResponse(BaseModel):
+    registered: bool
+    user_name: Optional[str] = None
+
+
 # ─── Group ───────────────────────────────────────────────────────────────────
 
 class GroupCreate(BaseModel):
@@ -155,6 +174,7 @@ class GroupMemberOut(BaseModel):
     user: UserOut
     role: MemberRole
     joined_at: datetime
+    is_registered: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 

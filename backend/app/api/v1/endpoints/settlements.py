@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,8 @@ from app.services.settlement_engine import (
 )
 from app.services.audit_service import log_event
 from app.services.push_service import send_push_notification
+
+logger = logging.getLogger("splitsure.settlements")
 
 router = APIRouter(prefix="/groups/{group_id}/settlements", tags=["settlements"])
 
@@ -184,6 +187,10 @@ async def get_balances(
         payer = user_map.get(txn.payer_id)
         receiver = user_map.get(txn.receiver_id)
         if not payer or not receiver:
+            logger.warning(
+                f"Settlement instruction skipped: payer_id={txn.payer_id}, "
+                f"receiver_id={txn.receiver_id} - user not found in group"
+            )
             continue
 
         upi_link = None
@@ -310,15 +317,19 @@ async def confirm_settlement(
 ):
     await _require_membership(db, group_id, current_user.id)
 
+    # First, lock the row
     result = await db.execute(
         select(Settlement)
-        .options(selectinload(Settlement.payer), selectinload(Settlement.receiver))
         .where(Settlement.id == settlement_id)
         .where(Settlement.group_id == group_id)
+        .with_for_update()
     )
     settlement = result.scalar_one_or_none()
     if not settlement:
         raise HTTPException(404, "Settlement not found")
+
+    # Then eagerly load relationships
+    await db.refresh(settlement, ["payer", "receiver"])
 
     if settlement.receiver_id != current_user.id:
         raise HTTPException(403, "Only the receiver can confirm a settlement")
@@ -370,15 +381,19 @@ async def dispute_settlement(
 ):
     await _require_membership(db, group_id, current_user.id)
 
+    # First, lock the row
     result = await db.execute(
         select(Settlement)
-        .options(selectinload(Settlement.payer), selectinload(Settlement.receiver))
         .where(Settlement.id == settlement_id)
         .where(Settlement.group_id == group_id)
+        .with_for_update()
     )
     settlement = result.scalar_one_or_none()
     if not settlement:
         raise HTTPException(404, "Settlement not found")
+
+    # Then eagerly load relationships
+    await db.refresh(settlement, ["payer", "receiver"])
 
     if settlement.receiver_id != current_user.id:
         raise HTTPException(403, "Only the receiver can dispute a settlement")
@@ -430,15 +445,19 @@ async def resolve_settlement_dispute(
     if member.role != MemberRole.ADMIN:
         raise HTTPException(403, "Only admins can resolve disputes")
 
+    # First, lock the row
     result = await db.execute(
         select(Settlement)
-        .options(selectinload(Settlement.payer), selectinload(Settlement.receiver))
         .where(Settlement.id == settlement_id)
         .where(Settlement.group_id == group_id)
+        .with_for_update()
     )
     settlement = result.scalar_one_or_none()
     if not settlement:
         raise HTTPException(404, "Settlement not found")
+
+    # Then eagerly load relationships
+    await db.refresh(settlement, ["payer", "receiver"])
     if settlement.status != SettlementStatus.DISPUTED:
         raise HTTPException(400, "Only disputed settlements can be resolved")
 

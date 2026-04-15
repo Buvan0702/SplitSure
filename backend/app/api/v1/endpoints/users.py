@@ -1,13 +1,15 @@
 import hashlib
+import logging
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.schemas import UserOut, UserUpdate
+from app.schemas.schemas import UserOut, UserUpdate, PhoneCheckRequest, PhoneCheckResponse
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -30,11 +32,17 @@ async def update_me(
     if body.upi_id is not None:
         current_user.upi_id = body.upi_id
 
+    logger = logging.getLogger("splitsure.users")
+
     try:
         await db.commit()
     except IntegrityError:
         await db.rollback()
         raise HTTPException(409, "Email is already in use")
+    except SQLAlchemyError as e:
+        await db.rollback()
+        logger.error(f"Database error updating user {current_user.id}: {e}")
+        raise HTTPException(500, "An unexpected database error occurred")
 
     await db.refresh(current_user)
     return current_user
@@ -89,3 +97,18 @@ async def register_push_token(
     current_user.push_token = token
     await db.commit()
     return {"status": "ok"}
+
+
+@router.post("/check-phone", response_model=PhoneCheckResponse)
+async def check_phone_registered(
+    body: PhoneCheckRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check if a phone number is registered in the system."""
+    result = await db.execute(select(User).where(User.phone == body.phone))
+    user = result.scalar_one_or_none()
+
+    if user:
+        return PhoneCheckResponse(registered=True, user_name=user.name)
+    return PhoneCheckResponse(registered=False, user_name=None)
