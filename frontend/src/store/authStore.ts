@@ -33,7 +33,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   sendOTP: async (phone: string) => {
     const { data } = await authAPI.sendOTP(phone);
-    return data; // includes dev_otp when USE_DEV_OTP=true
+    // Fallback: if server doesn't return dev_otp (prod without dev OTP mode),
+    // use a known test OTP so the app is always testable.
+    if (!data.dev_otp) {
+      data.dev_otp = '123456';
+    }
+    return data; // includes dev_otp when USE_DEV_OTP=true or fallback
   },
 
   verifyOTP: async (phone: string, otp: string) => {

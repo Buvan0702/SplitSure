@@ -3,6 +3,16 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { ExpenseCategory, SplitType } from '../types';
 
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof AxiosError) {
+    return error.response?.data?.detail || fallback;
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+}
+
 const DEFAULT_DEV_API_URL = 'https://splitsure.onrender.com/api/v1';
 const DEFAULT_PROD_API_URL = 'https://splitsure.onrender.com/api/v1';
 const API_TIMEOUT_MS = 60000;
@@ -169,6 +179,8 @@ export const usersAPI = {
     }),
   registerPushToken: (push_token: string) =>
     api.post('/users/me/push-token', { push_token }),
+  checkPhoneRegistration: (phone: string) =>
+    api.post('/users/check-phone', { phone }).then(res => res.data),
 };
 
 // ── Groups ────────────────────────────────────────────────────────────────
@@ -191,7 +203,7 @@ export const groupsAPI = {
 
 // ── Expenses ──────────────────────────────────────────────────────────────
 export const expensesAPI = {
-  list: (groupId: number, params?: { category?: string; search?: string }) =>
+  list: (groupId: number, params?: { category?: string; search?: string; limit?: number; offset?: number }) =>
     api.get(`/groups/${groupId}/expenses`, { params }),
   get: (groupId: number, id: number) =>
     api.get(`/groups/${groupId}/expenses/${id}`),
