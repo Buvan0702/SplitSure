@@ -4,6 +4,7 @@ Amounts are stored in paise (integer arithmetic to avoid float errors).
 """
 from typing import Iterable, List, Tuple
 from dataclasses import dataclass
+from urllib.parse import quote
 
 
 @dataclass
@@ -98,9 +99,7 @@ def transaction_lookup(transactions: Iterable[Transaction]) -> dict[tuple[int, i
 
 def build_upi_deep_link(upi_id: str, name: str, amount_paise: int, note: str) -> str:
     """Generates a standard UPI deep link URI."""
-    amount_rupees = amount_paise / 100
-    amount_str = f"{amount_rupees:.2f}"
-    # URL-encode spaces
-    note_encoded = note.replace(" ", "%20")
-    name_encoded = name.replace(" ", "%20")
-    return f"upi://pay?pa={upi_id}&pn={name_encoded}&am={amount_str}&tn={note_encoded}&cu=INR"
+    amount_str = f"{amount_paise // 100}.{amount_paise % 100:02d}"
+    name_encoded = quote(name, safe='')
+    note_encoded = quote(note, safe='')
+    return f"upi://pay?pa={quote(upi_id, safe='@.')}&pn={name_encoded}&am={amount_str}&tn={note_encoded}&cu=INR"

@@ -1,12 +1,17 @@
+import logging
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from app.api.v1 import router as api_router
 from app.core.config import settings
 from app.core.database import Base, engine
 import app.models.user  # noqa: F401 - register models with SQLAlchemy metadata
+
+logger = logging.getLogger("splitsure")
 
 app = FastAPI(
     title="SplitSure API",
@@ -16,12 +21,28 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if not settings.USE_DEV_OTP:  # Only add HSTS in production
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
+# Add security headers middleware BEFORE CORS middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 # ── Local file serving (dev only) ─────────────────────────────────────────────
@@ -33,6 +54,15 @@ if settings.USE_LOCAL_STORAGE:
     app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
 app.include_router(api_router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+async def _security_check():
+    if settings.USE_DEV_OTP and settings.SECRET_KEY.startswith("dev-"):
+        logger.warning(
+            "⚠️  SECURITY WARNING: Running with dev OTP AND dev secret key. "
+            "DO NOT use this configuration in production!"
+        )
 
 
 @app.on_event("startup")

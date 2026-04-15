@@ -5,6 +5,8 @@ Non-blocking, fire-and-forget with error suppression.
 import httpx
 from typing import Optional
 import logging
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -40,3 +42,31 @@ async def send_push_notification(
             )
     except Exception as e:
         logger.warning(f"Push notification failed: {e}")
+
+
+async def notify_group_invite(
+    db: AsyncSession,
+    user_id: int,
+    group_name: str,
+    inviter_name: str,
+) -> None:
+    """
+    Send push notification when user is invited/added to a group.
+    Fire-and-forget, silently fail.
+    """
+    from app.models.user import User
+
+    try:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.push_token:
+            return
+
+        await send_push_notification(
+            push_token=user.push_token,
+            title="Group Invite",
+            body=f"{inviter_name} added you to {group_name}",
+            data={"type": "group_invite", "group_name": group_name},
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send group invite notification: {e}")

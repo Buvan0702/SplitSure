@@ -20,6 +20,21 @@ from app.core.config import settings
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 MAX_FILE_SIZE = settings.MAX_FILE_SIZE_MB * 1024 * 1024
 
+# File signatures for MIME type verification
+FILE_SIGNATURES = {
+    b'\xff\xd8\xff': 'image/jpeg',
+    b'\x89PNG\r\n\x1a\n': 'image/png',
+    b'%PDF': 'application/pdf',
+}
+
+
+async def _verify_file_type(content: bytes, claimed_mime: str) -> bool:
+    """Verify file content matches claimed MIME type by checking file signatures."""
+    for signature, mime_type in FILE_SIGNATURES.items():
+        if content[:len(signature)] == signature:
+            return mime_type == claimed_mime
+    return False  # Unknown signature
+
 # Ensure local upload directory exists at startup
 _upload_root = Path(settings.LOCAL_UPLOAD_DIR)
 _upload_root.mkdir(parents=True, exist_ok=True)
@@ -103,6 +118,9 @@ async def upload_proof(
 
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(400, f"File size {len(content)//1024}KB exceeds {settings.MAX_FILE_SIZE_MB}MB limit")
+
+    if not await _verify_file_type(content, file.content_type):
+        raise HTTPException(400, "File content does not match declared MIME type")
 
     # Hash computed server-side to prevent tampering
     file_hash = hashlib.sha256(content).hexdigest()

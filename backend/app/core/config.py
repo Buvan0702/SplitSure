@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from typing import List
 
 
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     # Set USE_LOCAL_STORAGE=false and fill AWS_* vars when ready for production.
     USE_LOCAL_STORAGE: bool = True
     LOCAL_UPLOAD_DIR: str = "uploads"          # relative to backend root
-    LOCAL_BASE_URL: str = "http://localhost:8000"  # used to build download URLs
+    LOCAL_BASE_URL: str = "https://splitsure.onrender.com/api/v1"  # used to build download URLs
 
     # AWS S3 (leave empty while using local storage)
     AWS_ACCESS_KEY_ID: str = ""
@@ -48,6 +49,20 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 5
     INVITE_LINK_EXPIRE_HOURS: int = 72
     INVITE_LINK_MAX_USES: int = 10
+
+    @field_validator("OTP_EXPIRE_MINUTES")
+    @classmethod
+    def validate_otp_expire_minutes(cls, v: int) -> int:
+        if not 1 <= v <= 60:
+            raise ValueError("OTP_EXPIRE_MINUTES must be between 1 and 60")
+        return v
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if len(v) < 16:
+            raise ValueError("SECRET_KEY must be at least 16 characters")
+        return v
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
