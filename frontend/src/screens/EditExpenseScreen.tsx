@@ -3,24 +3,19 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
 import { Button, Card, Input } from '../components/ui';
-import { expensesAPI, groupsAPI } from '../services/api';
+import { expensesAPI, groupsAPI, getApiErrorMessage } from '../services/api';
 import { Expense, ExpenseCategory, Group, SplitType } from '../types';
-import { Colors, Radius, Spacing, Typography } from '../utils/theme';
-
-const categories: Array<{ value: ExpenseCategory; label: string }> = [
-  { value: 'food', label: 'Food' },
-  { value: 'transport', label: 'Transport' },
-  { value: 'accommodation', label: 'Hotel' },
-  { value: 'utilities', label: 'Utilities' },
-  { value: 'misc', label: 'Entertainment' },
-];
+import { Radius, Spacing, Typography, useTheme } from '../utils/theme';
+import { EXPENSE_CATEGORIES } from '../utils/helpers';
 
 export default function EditExpenseScreen() {
   const { id, groupId } = useLocalSearchParams<{ id: string; groupId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { colors, isDark } = useTheme();
 
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -55,14 +50,15 @@ export default function EditExpenseScreen() {
       setCategory(exp.category);
       setSplitType(exp.split_type);
 
+      const splits = exp.splits || [];
       if (exp.split_type === 'exact') {
         const exact: Record<number, string> = {};
-        exp.splits.forEach(s => { exact[s.user.id] = String(s.amount / 100); });
+        splits.forEach(s => { exact[s.user.id] = String(s.amount / 100); });
         setExactAmounts(exact);
       }
       if (exp.split_type === 'percentage') {
         const pct: Record<number, string> = {};
-        exp.splits.forEach(s => { pct[s.user.id] = String(s.percentage ?? 0); });
+        splits.forEach(s => { pct[s.user.id] = String(s.percentage ?? 0); });
         setPercentages(pct);
       }
 
@@ -124,8 +120,8 @@ export default function EditExpenseScreen() {
       queryClient.invalidateQueries({ queryKey: ['balances', groupId] });
       router.back();
     },
-    onError: (error: any) => {
-      Alert.alert(error?.message || error?.response?.data?.detail || 'Failed to update expense');
+    onError: (error: unknown) => {
+      Alert.alert(getApiErrorMessage(error, 'Failed to update expense'));
     },
   });
 
@@ -138,7 +134,7 @@ export default function EditExpenseScreen() {
       <AppBackdrop>
         <TopBar leftIcon="arrow-back" onLeftPress={() => router.back()} title="EDIT EXPENSE" subtitle="Loading..." />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ color: Colors.textSecondary }}>Loading expense...</Text>
+          <Text style={{ color: colors.textSecondary }}>Loading expense...</Text>
         </View>
       </AppBackdrop>
     );
@@ -148,16 +144,16 @@ export default function EditExpenseScreen() {
     return (
       <AppBackdrop>
         <TopBar leftIcon="arrow-back" onLeftPress={() => router.back()} title="EDIT EXPENSE" subtitle="Locked" />
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl }}>
-          <MaterialIcons color={Colors.warning} name="lock" size={48} />
-          <Text style={{ color: Colors.textPrimary, fontSize: Typography.lg, fontWeight: '800', marginTop: Spacing.base, textAlign: 'center' }}>
+        <Animated.View entering={FadeIn} style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.xl }}>
+          <MaterialIcons color={colors.warning} name="lock" size={48} />
+          <Text style={{ color: colors.textPrimary, fontSize: Typography.lg, fontWeight: '800', marginTop: Spacing.base, textAlign: 'center' }}>
             {expense.is_settled ? 'Expense is settled' : 'Expense is disputed'}
           </Text>
-          <Text style={{ color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.sm }}>
+          <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: Spacing.sm }}>
             This expense can no longer be edited.
           </Text>
           <Button title="Go Back" onPress={() => router.back()} style={{ marginTop: Spacing.xl }} />
-        </View>
+        </Animated.View>
       </AppBackdrop>
     );
   }
@@ -165,11 +161,11 @@ export default function EditExpenseScreen() {
   return (
     <AppBackdrop>
       <TopBar leftIcon="arrow-back" onLeftPress={() => router.back()} title="SPLITSURE" subtitle="Edit Expense" />
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.amountHero}>
-          <Text style={styles.amountLabel}>Transaction Value</Text>
+      <Animated.ScrollView entering={FadeIn} contentContainerStyle={styles.scroll}>
+        <Animated.View entering={FadeInDown} style={styles.amountHero}>
+          <Text style={[styles.amountLabel, { color: colors.textSecondary }]}>Transaction Value</Text>
           <View style={styles.amountRow}>
-            <Text style={styles.currency}>₹</Text>
+            <Text style={[styles.currency, { color: colors.textPrimary }]}>₹</Text>
             <Input
               containerStyle={{ flex: 1, marginBottom: 0 }}
               value={amount}
@@ -179,79 +175,85 @@ export default function EditExpenseScreen() {
               style={styles.amountInput}
             />
           </View>
-        </View>
+        </Animated.View>
 
-        <Card style={styles.detailCard}>
-          <Input
-            label="Floating Description"
-            value={description}
-            onChangeText={setDescription}
-            placeholder="ENTER DESCRIPTION"
-          />
-          <Text style={styles.sectionOverline}>Expense Category</Text>
-          <View style={styles.chipWrap}>
-            {categories.map((item) => {
-              const active = item.value === category;
-              return (
-                <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, active && styles.categoryChipActive]}>
-                  <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>{item.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </Card>
+        <Animated.View entering={FadeInDown.delay(100)} style={styles.detailCardWrapper}>
+          <Card style={styles.detailCard}>
+            <Input
+              label="Floating Description"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="ENTER DESCRIPTION"
+            />
+            <Text style={[styles.sectionOverline, { color: colors.textSecondary }]}>Expense Category</Text>
+            <View style={styles.chipWrap}>
+              {EXPENSE_CATEGORIES.map((item) => {
+                const active = item.value === category;
+                return (
+                  <Pressable key={item.value} onPress={() => setCategory(item.value)} style={[styles.categoryChip, { backgroundColor: colors.surfaceLowest, borderColor: colors.ghostBorder }, active && styles.categoryChipActive, active && { backgroundColor: colors.successLight, borderColor: colors.success }]}>
+                    <Text style={[styles.categoryChipText, { color: colors.textSecondary }, active && styles.categoryChipTextActive, active && { color: colors.secondary }]}>{item.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Card>
+        </Animated.View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionOverline}>Split Mode</Text>
-          <View style={styles.toggle}>
+        <Animated.View entering={FadeInDown.delay(200)} style={styles.sectionHeader}>
+          <Text style={[styles.sectionOverline, { color: colors.textSecondary }]}>Split Mode</Text>
+          <View style={[styles.toggle, { backgroundColor: colors.surface, borderColor: colors.ghostBorder }]}>
             {(['equal', 'exact', 'percentage'] as SplitType[]).map((value) => {
               const active = value === splitType;
               return (
-                <Pressable key={value} onPress={() => setSplitType(value)} style={[styles.toggleChip, active && styles.toggleChipActive]}>
-                  <Text style={[styles.toggleText, active && styles.toggleTextActive]}>{value === 'percentage' ? 'PERCENT' : value.toUpperCase()}</Text>
+                <Pressable key={value} onPress={() => setSplitType(value)} style={[styles.toggleChip, active && styles.toggleChipActive, active && { backgroundColor: colors.primary }]}>
+                  <Text style={[styles.toggleText, { color: colors.textSecondary }, active && styles.toggleTextActive, active && { color: colors.primaryInk }]}>{value === 'percentage' ? 'PERCENT' : value.toUpperCase()}</Text>
                 </Pressable>
               );
             })}
           </View>
-        </View>
+        </Animated.View>
 
-        <Card style={styles.memberTable}>
-          {(groupQuery.data.members || []).map((member) => (
-            <View key={member.id} style={styles.memberRow}>
-              <View>
-                <Text style={styles.memberName}>{member.user.name || member.user.phone}</Text>
-                <Text style={styles.memberRole}>{member.role}</Text>
+        <Animated.View entering={FadeInDown.delay(300)} style={styles.memberTableWrapper}>
+          <Card style={styles.memberTable}>
+            {(groupQuery.data.members || []).map((member) => (
+              <View key={member.id} style={[styles.memberRow, { borderBottomColor: colors.border }]}>
+                <View>
+                  <Text style={[styles.memberName, { color: colors.textPrimary }]}>{member.user.name || member.user.phone}</Text>
+                  <Text style={[styles.memberRole, { color: colors.textSecondary }]}>{member.role}</Text>
+                </View>
+                {splitType === 'equal' ? (
+                  <Text style={[styles.memberValue, { color: colors.secondary }]}>
+                    ₹{groupQuery.data.members.length ? (amountValue / Math.max(groupQuery.data.members.length, 1) / 100).toFixed(2) : '0.00'}
+                  </Text>
+                ) : null}
+                {splitType === 'exact' ? (
+                  <Input
+                    containerStyle={{ marginBottom: 0, width: 110 }}
+                    value={exactAmounts[member.user.id] || ''}
+                    onChangeText={(value) => setExactAmounts((c) => ({ ...c, [member.user.id]: value }))}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                  />
+                ) : null}
+                {splitType === 'percentage' ? (
+                  <Input
+                    containerStyle={{ marginBottom: 0, width: 110 }}
+                    value={percentages[member.user.id] || ''}
+                    onChangeText={(value) => setPercentages((c) => ({ ...c, [member.user.id]: value }))}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    rightAddon={<Text style={styles.memberRole}>%</Text>}
+                  />
+                ) : null}
               </View>
-              {splitType === 'equal' ? (
-                <Text style={styles.memberValue}>
-                  ₹{groupQuery.data.members.length ? (amountValue / Math.max(groupQuery.data.members.length, 1) / 100).toFixed(2) : '0.00'}
-                </Text>
-              ) : null}
-              {splitType === 'exact' ? (
-                <Input
-                  containerStyle={{ marginBottom: 0, width: 110 }}
-                  value={exactAmounts[member.user.id] || ''}
-                  onChangeText={(value) => setExactAmounts((c) => ({ ...c, [member.user.id]: value }))}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                />
-              ) : null}
-              {splitType === 'percentage' ? (
-                <Input
-                  containerStyle={{ marginBottom: 0, width: 110 }}
-                  value={percentages[member.user.id] || ''}
-                  onChangeText={(value) => setPercentages((c) => ({ ...c, [member.user.id]: value }))}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  rightAddon={<Text style={styles.memberRole}>%</Text>}
-                />
-              ) : null}
-            </View>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        </Animated.View>
 
-        <Button title="UPDATE EXPENSE" onPress={() => updateExpense.mutate()} loading={updateExpense.isPending} />
-      </ScrollView>
+        <Animated.View entering={FadeInDown.delay(400)}>
+          <Button title="UPDATE EXPENSE" onPress={() => updateExpense.mutate()} loading={updateExpense.isPending} />
+        </Animated.View>
+      </Animated.ScrollView>
       <FloatingDock current="activity" />
     </AppBackdrop>
   );
@@ -268,7 +270,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xl,
   },
   amountLabel: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '800',
     letterSpacing: 3,
@@ -280,7 +281,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   currency: {
-    color: Colors.textPrimary,
     fontSize: 48,
     fontWeight: '300',
     marginRight: 8,
@@ -290,11 +290,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -1,
   },
-  detailCard: {
+  detailCardWrapper: {
     marginBottom: Spacing.xl,
   },
+  detailCard: {
+    marginBottom: 0,
+  },
   sectionOverline: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '800',
     letterSpacing: 2,
@@ -310,21 +312,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceLowest,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
   },
   categoryChipActive: {
-    backgroundColor: 'rgba(29,251,165,0.1)',
-    borderColor: 'rgba(29,251,165,0.2)',
   },
   categoryChipText: {
-    color: Colors.textSecondary,
     fontSize: Typography.sm,
     fontWeight: '700',
   },
   categoryChipTextActive: {
-    color: Colors.secondary,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -335,10 +331,8 @@ const styles = StyleSheet.create({
   },
   toggle: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.ghostBorder,
     padding: 4,
   },
   toggleChip: {
@@ -347,20 +341,20 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   toggleChipActive: {
-    backgroundColor: Colors.primary,
   },
   toggleText: {
-    color: Colors.textSecondary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.2,
   },
   toggleTextActive: {
-    color: Colors.primaryInk,
+  },
+  memberTableWrapper: {
+    marginBottom: Spacing.xl,
   },
   memberTable: {
     paddingVertical: 0,
-    marginBottom: Spacing.xl,
+    marginBottom: 0,
   },
   memberRow: {
     minHeight: 72,
@@ -370,15 +364,12 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingVertical: Spacing.base,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
   },
   memberName: {
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '700',
   },
   memberRole: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -386,7 +377,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   memberValue: {
-    color: Colors.secondary,
     fontSize: Typography.base,
     fontWeight: '800',
   },
