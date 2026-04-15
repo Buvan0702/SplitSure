@@ -7,16 +7,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
 import { Avatar, Button, Card, Input } from '../components/ui';
-import { groupsAPI, reportsAPI, settlementsAPI } from '../services/api';
+import { groupsAPI, reportsAPI, settlementsAPI, getApiErrorMessage } from '../services/api';
 import { Group, GroupBalances, Settlement } from '../types';
-import { Colors, Radius, Spacing, Typography } from '../utils/theme';
+import { Radius, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
-
-const upiApps = [
-  { name: 'GPay', icon: 'G', color: '#1A73E8', scheme: 'gpay://' },
-  { name: 'PhonePe', icon: 'P', color: '#5F259F', scheme: 'phonepe://' },
-  { name: 'Paytm', icon: 'Y', color: '#00BAF2', scheme: 'paytmmp://' },
-];
+import { UPI_APPS, buildUpiIntent } from '../utils/upi';
 
 function toBase64(bytes: Uint8Array) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -38,11 +33,10 @@ function sanitizeFileName(fileName: string) {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 
-function buildUpiIntent(baseLink: string, appScheme: string) {
-  return baseLink.replace(/^upi:\/\//, appScheme);
-}
+
 
 export default function SettlementsScreen() {
+  const { colors, isDark } = useTheme();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -89,7 +83,7 @@ export default function SettlementsScreen() {
       refreshQueries();
       Alert.alert('Settlement initiated');
     },
-    onError: (error: any) => Alert.alert(error?.response?.data?.detail || 'Failed to initiate settlement'),
+    onError: (error: unknown) => Alert.alert(getApiErrorMessage(error, 'Failed to initiate settlement')),
   });
 
   const confirmSettlement = useMutation({
@@ -98,7 +92,7 @@ export default function SettlementsScreen() {
       refreshQueries();
       Alert.alert('Settlement confirmed');
     },
-    onError: (error: any) => Alert.alert(error?.response?.data?.detail || 'Failed to confirm settlement'),
+    onError: (error: unknown) => Alert.alert(getApiErrorMessage(error, 'Failed to confirm settlement')),
   });
 
   const disputeSettlement = useMutation({
@@ -111,7 +105,7 @@ export default function SettlementsScreen() {
       setNoteError('');
       Alert.alert('Settlement disputed');
     },
-    onError: (error: any) => setNoteError(error?.response?.data?.detail || 'Failed to dispute settlement'),
+    onError: (error: unknown) => setNoteError(getApiErrorMessage(error, 'Failed to dispute settlement')),
   });
 
   const resolveSettlement = useMutation({
@@ -124,7 +118,7 @@ export default function SettlementsScreen() {
       setNoteError('');
       Alert.alert('Dispute resolved');
     },
-    onError: (error: any) => setNoteError(error?.response?.data?.detail || 'Failed to resolve dispute'),
+    onError: (error: unknown) => setNoteError(getApiErrorMessage(error, 'Failed to resolve dispute')),
   });
 
   const generateReport = useMutation({
@@ -147,7 +141,7 @@ export default function SettlementsScreen() {
         Alert.alert('Failed to save report');
       }
     },
-    onError: (error: any) => Alert.alert(error?.response?.data?.detail || 'Failed to generate report'),
+    onError: (error: unknown) => Alert.alert(getApiErrorMessage(error, 'Failed to generate report')),
   });
 
   const isAdmin = (groupQuery.data?.members || []).some((member) => member.user.id === user?.id && member.role === 'admin');
@@ -175,34 +169,34 @@ export default function SettlementsScreen() {
       <TopBar title="SETTLE UP" subtitle="Optimized payment matrix" userName={user?.name || user?.phone} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.headerRow}>
-          <View style={styles.savedChip}>
-            <MaterialIcons color={Colors.primary} name="bolt" size={14} />
-            <Text style={styles.savedChipText}>{myInstructions.length} TXNS SAVED</Text>
+          <View style={[styles.savedChip, { backgroundColor: colors.primaryLight, borderColor: colors.ghostBorderStrong }]}>
+            <MaterialIcons color={colors.primary} name="bolt" size={14} />
+            <Text style={[styles.savedChipText, { color: colors.primary }]}>{myInstructions.length} TXNS SAVED</Text>
           </View>
           <View>
-            <Text style={styles.headerLabel}>Net Settlement</Text>
-            <Text style={styles.headerAmount}>₹{(netSettlement / 100).toFixed(2)}</Text>
+            <Text style={[styles.headerLabel, { color: colors.textSecondary }]}>Net Settlement</Text>
+            <Text style={[styles.headerAmount, { color: colors.secondary }]}>₹{(netSettlement / 100).toFixed(2)}</Text>
           </View>
         </View>
 
         <Card style={styles.matrixCard}>
-          <Text style={styles.panelTitle}>Pending Optimized Transfers</Text>
-          <Text style={styles.panelCopy}>These are the minimum payments needed after confirmed settlements are applied.</Text>
+          <Text style={[styles.panelTitle, { color: colors.textPrimary }]}>Pending Optimized Transfers</Text>
+          <Text style={[styles.panelCopy, { color: colors.textSecondary }]}>These are the minimum payments needed after confirmed settlements are applied.</Text>
           {(balancesQuery.data?.optimized_settlements || []).length ? (
             (balancesQuery.data?.optimized_settlements || []).slice(0, 4).map((instruction, index) => (
               <View key={`${instruction.payer_id}-${instruction.receiver_id}-${index}`} style={styles.inlineTransfer}>
-                <Text style={styles.inlineTransferText}>{instruction.payer_name}</Text>
-                <Text style={styles.inlineTransferAmount}>₹{(instruction.amount / 100).toFixed(0)}</Text>
-                <Text style={styles.inlineTransferText}>{instruction.receiver_name}</Text>
+                <Text style={[styles.inlineTransferText, { color: colors.textPrimary }]}>{instruction.payer_name}</Text>
+                <Text style={[styles.inlineTransferAmount, { color: colors.secondary }]}>₹{(instruction.amount / 100).toFixed(0)}</Text>
+                <Text style={[styles.inlineTransferText, { color: colors.textPrimary }]}>{instruction.receiver_name}</Text>
               </View>
             ))
           ) : (
-            <Text style={styles.emptyCopy}>No optimized settlements pending.</Text>
+            <Text style={[styles.emptyCopy, { color: colors.textSecondary }]}>No optimized settlements pending.</Text>
           )}
         </Card>
 
         <View style={styles.upiRow}>
-          {upiApps.map((app) => (
+          {UPI_APPS.map((app) => (
             <Pressable
               key={app.name}
               onPress={async () => {
@@ -232,7 +226,7 @@ export default function SettlementsScreen() {
                 <View style={[styles.upiIcon, { backgroundColor: `${app.color}22` }]}>
                   <Text style={[styles.upiIconText, { color: app.color }]}>{app.icon}</Text>
                 </View>
-                <Text style={styles.upiName}>{app.name}</Text>
+                <Text style={[styles.upiName, { color: colors.textSecondary }]}>{app.name}</Text>
               </Card>
             </Pressable>
           ))}
@@ -240,12 +234,12 @@ export default function SettlementsScreen() {
 
         <Card style={styles.reportCard}>
           <View style={styles.reportLeft}>
-            <View style={styles.reportIconWrap}>
-              <MaterialIcons color={Colors.primaryInk} name="workspace-premium" size={24} />
+            <View style={[styles.reportIconWrap, { backgroundColor: colors.primary }]}>
+              <MaterialIcons color={colors.primaryInk} name="workspace-premium" size={24} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.reportTitle}>Generate Proof Report</Text>
-              <Text style={styles.reportCopy}>Creates a shareable PDF in dev mode and opens the system share sheet.</Text>
+              <Text style={[styles.reportTitle, { color: colors.textPrimary }]}>Generate Proof Report</Text>
+              <Text style={[styles.reportCopy, { color: colors.textSecondary }]}>Creates a shareable PDF in dev mode and opens the system share sheet.</Text>
             </View>
           </View>
           <Button title="EXPORT PDF" onPress={() => generateReport.mutate()} loading={generateReport.isPending} />
@@ -255,7 +249,16 @@ export default function SettlementsScreen() {
           <Button
             key={`${item.receiver_id}-${index}`}
             title={`MARK ₹${(item.amount / 100).toFixed(0)} PAID TO ${item.receiver_name.toUpperCase()}`}
-            onPress={() => initiateSettlement.mutate({ receiver_id: item.receiver_id, amount: item.amount })}
+            onPress={() => {
+              Alert.alert(
+                'Confirm Payment',
+                'Are you sure you want to confirm this settlement?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Confirm', onPress: () => initiateSettlement.mutate({ receiver_id: item.receiver_id, amount: item.amount }) },
+                ]
+              );
+            }}
             loading={initiateSettlement.isPending}
             style={{ marginTop: index === 0 ? 0 : Spacing.sm }}
           />
@@ -270,20 +273,20 @@ export default function SettlementsScreen() {
             const canResolve = disputed && isAdmin;
 
             return (
-              <Card key={settlement.id} style={[styles.transactionCard, pending && styles.transactionPending, disputed && styles.transactionDisputed]}>
+              <Card key={settlement.id} style={[styles.transactionCard, pending && [styles.transactionPending, { borderColor: colors.warningLight }], disputed && [styles.transactionDisputed, { borderColor: colors.dangerLight }]]}>
                 <View style={styles.transactionTop}>
-                  <Text style={[styles.transactionCode, disputed && { color: Colors.danger }]}>TRANSACTION #{String(settlement.id).padStart(3, '0')}</Text>
-                  <Text style={[styles.transactionStatus, disputed ? { color: Colors.danger } : pending ? { color: Colors.warning } : { color: Colors.secondary }]}>
-                    {settlement.status.toUpperCase()}
+                  <Text style={[styles.transactionCode, { color: colors.primary }, disputed && { color: colors.danger }]}>TRANSACTION #{String(settlement.id).padStart(3, '0')}</Text>
+                  <Text style={[styles.transactionStatus, disputed ? { color: colors.danger } : pending ? { color: colors.warning } : { color: colors.secondary }]}>
+                    {disputed ? '⚠️ ' : pending ? '⏳ ' : '✅ '}{settlement.status.toUpperCase()}
                   </Text>
                 </View>
                 <View style={styles.transactionFlow}>
-                  <Text style={styles.transactionName}>{settlement.payer.name || settlement.payer.phone}</Text>
-                  <Text style={[styles.transactionAmount, disputed && { color: Colors.danger }]}>₹{(settlement.amount / 100).toFixed(0)}</Text>
-                  <Text style={styles.transactionName}>{settlement.receiver.name || settlement.receiver.phone}</Text>
+                  <Text style={[styles.transactionName, { color: colors.textPrimary }]}>{settlement.payer.name || settlement.payer.phone}</Text>
+                  <Text style={[styles.transactionAmount, { color: colors.secondary }, disputed && { color: colors.danger }]}>₹{(settlement.amount / 100).toFixed(0)}</Text>
+                  <Text style={[styles.transactionName, { color: colors.textPrimary }]}>{settlement.receiver.name || settlement.receiver.phone}</Text>
                 </View>
-                {settlement.dispute_note ? <Text style={styles.transactionNote}>{settlement.dispute_note}</Text> : null}
-                {settlement.resolution_note ? <Text style={styles.transactionNote}>Resolved: {settlement.resolution_note}</Text> : null}
+                {settlement.dispute_note ? <Text style={[styles.transactionNote, { color: colors.textSecondary }]}>{settlement.dispute_note}</Text> : null}
+                {settlement.resolution_note ? <Text style={[styles.transactionNote, { color: colors.textSecondary }]}>Resolved: {settlement.resolution_note}</Text> : null}
                 {(canConfirm || canDispute || canResolve) ? (
                   <View style={styles.transactionActions}>
                     {canConfirm ? (
@@ -306,10 +309,10 @@ export default function SettlementsScreen() {
       <FloatingDock current="groups" />
 
       <Modal visible={showDisputeModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Dispute Settlement</Text>
-            <Text style={styles.modalSub}>Explain why this payment cannot be confirmed.</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Dispute Settlement</Text>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>Explain why this payment cannot be confirmed.</Text>
             <Input
               label="Dispute Note"
               value={note}
@@ -338,10 +341,10 @@ export default function SettlementsScreen() {
       </Modal>
 
       <Modal visible={showResolveModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Resolve Dispute</Text>
-            <Text style={styles.modalSub}>Add a short admin note before resolving this disputed payment.</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Resolve Dispute</Text>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>Add a short admin note before resolving this disputed payment.</Text>
             <Input
               label="Resolution Note"
               value={note}
@@ -391,18 +394,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: Radius.full,
-    backgroundColor: 'rgba(163,166,255,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(163,166,255,0.18)',
   },
   savedChipText: {
-    color: Colors.primary,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.2,
   },
   headerLabel: {
-    color: Colors.textSecondary,
     fontSize: Typography.xs,
     fontWeight: '700',
     letterSpacing: 2,
@@ -410,7 +409,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   headerAmount: {
-    color: Colors.secondary,
     fontSize: Typography.xl,
     fontWeight: '800',
     marginTop: 4,
@@ -419,13 +417,11 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   panelTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.lg,
     fontWeight: '800',
     marginBottom: 8,
   },
   panelCopy: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     marginBottom: Spacing.lg,
   },
@@ -435,19 +431,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   inlineTransferText: {
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '700',
     flex: 1,
   },
   inlineTransferAmount: {
-    color: Colors.secondary,
     fontSize: Typography.base,
     fontWeight: '800',
     marginHorizontal: Spacing.sm,
   },
   emptyCopy: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
   },
   section: {
@@ -455,19 +448,14 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
   },
   transactionCard: {},
-  transactionPending: {
-    borderColor: 'rgba(245,158,11,0.2)',
-  },
-  transactionDisputed: {
-    borderColor: 'rgba(255,110,132,0.2)',
-  },
+  transactionPending: {},
+  transactionDisputed: {},
   transactionTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: Spacing.base,
   },
   transactionCode: {
-    color: Colors.primary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.2,
@@ -485,17 +473,14 @@ const styles = StyleSheet.create({
   },
   transactionName: {
     flex: 1,
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '700',
   },
   transactionAmount: {
-    color: Colors.secondary,
     fontSize: Typography.base,
     fontWeight: '800',
   },
   transactionNote: {
-    color: Colors.textSecondary,
     fontSize: Typography.sm,
     marginTop: Spacing.sm,
   },
@@ -527,7 +512,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   upiName: {
-    color: Colors.textSecondary,
     fontSize: Typography.sm,
     fontWeight: '700',
   },
@@ -544,38 +528,32 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: Radius.md,
-    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   reportTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.base,
     fontWeight: '800',
     textTransform: 'uppercase',
   },
   reportCopy: {
-    color: Colors.textSecondary,
     fontSize: Typography.sm,
     marginTop: 4,
   },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: Colors.overlay,
     padding: Spacing.base,
   },
   modalCard: {
     marginBottom: Spacing.lg,
   },
   modalTitle: {
-    color: Colors.textPrimary,
     fontSize: Typography.xl,
     fontWeight: '800',
     marginBottom: 8,
   },
   modalSub: {
-    color: Colors.textSecondary,
     fontSize: Typography.base,
     marginBottom: Spacing.lg,
   },
