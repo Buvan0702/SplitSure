@@ -18,6 +18,10 @@ from app.services.push_service import notify_group_invite
 router = APIRouter(prefix="/groups", tags=["groups"])
 
 
+def _is_registered_user(user: User) -> bool:
+    return bool(user.name and user.email)
+
+
 async def _get_member(db: AsyncSession, group_id: int, user_id: int) -> GroupMember | None:
     result = await db.execute(
         select(GroupMember)
@@ -154,20 +158,19 @@ async def add_member(
     if len(result.scalars().all()) >= settings.MAX_GROUP_MEMBERS:
         raise HTTPException(400, f"Group has reached the maximum of {settings.MAX_GROUP_MEMBERS} members")
 
-    # Find user by phone
-    result = await db.execute(select(User).where(User.phone == body.phone))
-    new_user = result.scalar_one_or_none()
-    is_registered = True  # Default to registered
-    if not new_user:
-        if not settings.USE_DEV_OTP:
-            raise HTTPException(404, "User with this phone number not found")
-        new_user = User(phone=body.phone)
-        db.add(new_user)
-        await db.flush()
-        is_registered = False  # Auto-created user is not registered
+    if body.user_id is not None:
+        result = await db.execute(select(User).where(User.id == body.user_id))
+        lookup_value = str(body.user_id)
     else:
-        # User exists - check if they have a name (properly registered)
-        is_registered = new_user.name is not None
+        result = await db.execute(select(User).where(User.phone == body.phone))
+        lookup_value = body.phone or "unknown"
+
+    new_user = result.scalar_one_or_none()
+    if not new_user:
+        raise HTTPException(404, f"Registered user not found for identifier: {lookup_value}")
+
+    if not _is_registered_user(new_user):
+        raise HTTPException(400, "User exists but has not completed registration")
 
     existing = await _get_member(db, group_id, new_user.id)
     if existing:
@@ -182,7 +185,7 @@ async def add_member(
     await log_event(
         db, group_id, AuditEventType.MEMBER_ADDED, current_user.id,
         entity_id=new_user.id,
-        metadata_json={"phone": body.phone, "user_name": new_user.name},
+        metadata_json={"phone": new_user.phone, "user_name": new_user.name},
     )
 
     await db.commit()
@@ -203,7 +206,7 @@ async def add_member(
         user=member_record.user,
         role=member_record.role,
         joined_at=member_record.joined_at,
-        is_registered=is_registered,
+        is_registered=True,
     )
 
 
@@ -306,7 +309,7 @@ async def join_via_invite(
             )
 
     # Determine if the joining user is registered
-    is_registered = current_user.name is not None
+    is_registered = _is_registered_user(current_user)
 
     return GroupMemberOut(
         id=member_record.id,

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.schemas import ExpenseUpdate, OTPVerify, UserUpdate
+from app.schemas.schemas import AddMemberRequest, ExpenseUpdate, OTPVerify, RegisterRequest, UserUpdate
 
 
 def test_otp_verify_normalizes_phone_and_requires_six_digits():
@@ -27,3 +27,31 @@ def test_user_update_trims_and_normalizes_optional_fields():
 def test_expense_update_requires_splits_when_switching_modes():
     with pytest.raises(ValidationError):
         ExpenseUpdate(split_type="percentage")
+
+
+def test_register_request_requires_valid_name_email_phone():
+    payload = RegisterRequest(name="  Alice  ", email=" Alice@Example.com ", phone="9876501234")
+
+    assert payload.name == "Alice"
+    assert payload.email == "alice@example.com"
+    assert payload.phone == "+919876501234"
+
+    with pytest.raises(ValidationError):
+        RegisterRequest(name="", email="alice@example.com", phone="9876501234")
+
+    with pytest.raises(ValidationError):
+        RegisterRequest(name="Alice", email="invalid-email", phone="9876501234")
+
+
+def test_add_member_request_accepts_exactly_one_identifier():
+    by_phone = AddMemberRequest(phone="9876501234")
+    by_user_id = AddMemberRequest(user_id=42)
+
+    assert by_phone.phone == "+919876501234"
+    assert by_user_id.user_id == 42
+
+    with pytest.raises(ValidationError):
+        AddMemberRequest()
+
+    with pytest.raises(ValidationError):
+        AddMemberRequest(phone="9876501234", user_id=42)

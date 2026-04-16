@@ -21,6 +21,42 @@ class OTPRequest(BaseModel):
         return v
 
 
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    phone: str
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str):
+        value = v.strip()
+        if not value:
+            raise ValueError("Name is required")
+        if len(value) > 100:
+            raise ValueError("Name must be 100 characters or fewer")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str):
+        value = v.strip().lower()
+        if not value:
+            raise ValueError("Email is required")
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("Enter a valid email address")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v):
+        v = v.strip().replace(" ", "")
+        if not v.startswith("+"):
+            v = "+91" + v
+        if len(v) < 10:
+            raise ValueError("Invalid phone number")
+        return v
+
+
 class OTPVerify(BaseModel):
     phone: str
     otp: str
@@ -128,6 +164,8 @@ class PhoneCheckRequest(BaseModel):
 
 class PhoneCheckResponse(BaseModel):
     registered: bool
+    user_id: Optional[int] = None
+    phone: Optional[str] = None
     user_name: Optional[str] = None
 
 
@@ -192,17 +230,37 @@ class GroupOut(BaseModel):
 
 
 class AddMemberRequest(BaseModel):
-    phone: str
+    phone: Optional[str] = None
+    user_id: Optional[int] = None
 
     @field_validator("phone")
     @classmethod
-    def validate_phone(cls, v):
+    def validate_phone(cls, v: Optional[str]):
+        if v is None:
+            return v
         v = v.strip().replace(" ", "")
         if not v.startswith("+"):
             v = "+91" + v
         if len(v) < 10:
             raise ValueError("Invalid phone number")
         return v
+
+    @field_validator("user_id")
+    @classmethod
+    def validate_user_id(cls, v: Optional[int]):
+        if v is None:
+            return v
+        if v <= 0:
+            raise ValueError("user_id must be a positive integer")
+        return v
+
+    @model_validator(mode="after")
+    def validate_identifier(self):
+        if not self.phone and self.user_id is None:
+            raise ValueError("Provide either phone or user_id")
+        if self.phone and self.user_id is not None:
+            raise ValueError("Provide only one identifier: phone or user_id")
+        return self
 
 
 class InviteLinkOut(BaseModel):

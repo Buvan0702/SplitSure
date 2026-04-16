@@ -12,13 +12,17 @@ from app.core.security import (
 )
 from app.core.config import settings
 from app.models.user import User, OTPRecord
-from app.schemas.schemas import OTPRequest, OTPVerify, TokenResponse, UserOut, RefreshRequest
+from app.schemas.schemas import OTPRequest, OTPVerify, TokenResponse, UserOut, RefreshRequest, RegisterRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _hash_otp(otp: str) -> str:
     return hashlib.sha256(otp.encode()).hexdigest()
+
+
+def _is_registered_user(user: User) -> bool:
+    return bool(user.name and user.email)
 
 
 async def _check_rate_limit(db: AsyncSession, phone: str):
@@ -55,8 +59,42 @@ async def _send_sms_otp(phone: str, otp: str):
         logger.error(f"SMS delivery failed for phone {phone[-4:]}: {e}")
 
 
+@router.post("/register", response_model=UserOut, status_code=201)
+async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    existing_email_q = await db.execute(select(User).where(User.email == body.email))
+    existing_email_user = existing_email_q.scalar_one_or_none()
+
+    existing_phone_q = await db.execute(select(User).where(User.phone == body.phone))
+    existing_phone_user = existing_phone_q.scalar_one_or_none()
+
+    if existing_phone_user and _is_registered_user(existing_phone_user):
+        raise HTTPException(409, "Phone number is already registered")
+
+    if existing_email_user:
+        if not existing_phone_user or existing_email_user.id != existing_phone_user.id:
+            raise HTTPException(409, "Email is already in use")
+
+    if existing_phone_user:
+        existing_phone_user.name = body.name
+        existing_phone_user.email = body.email
+        await db.commit()
+        await db.refresh(existing_phone_user)
+        return UserOut.model_validate(existing_phone_user)
+
+    user = User(phone=body.phone, name=body.name, email=body.email)
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return UserOut.model_validate(user)
+
+
 @router.post("/send-otp")
 async def send_otp(body: OTPRequest, db: AsyncSession = Depends(get_db)):
+    user_result = await db.execute(select(User).where(User.phone == body.phone))
+    user = user_result.scalar_one_or_none()
+    if not user or not _is_registered_user(user):
+        raise HTTPException(404, "Phone number not registered. Please sign up first.")
+
     await _check_rate_limit(db, body.phone)
 
     otp = f"{secrets.randbelow(900000) + 100000}"
@@ -98,9 +136,8 @@ async def verify_otp(body: OTPVerify, db: AsyncSession = Depends(get_db)):
 
     result = await db.execute(select(User).where(User.phone == body.phone))
     user = result.scalar_one_or_none()
-    if not user:
-        user = User(phone=body.phone)
-        db.add(user)
+    if not user or not _is_registered_user(user):
+        raise HTTPException(404, "Phone number not registered. Please sign up first.")
 
     await db.commit()
     await db.refresh(user)

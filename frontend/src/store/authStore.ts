@@ -17,6 +17,7 @@ interface AuthState {
   isLoading: boolean;
 
   // Actions
+  register: (name: string, email: string, phone: string) => Promise<void>;
   sendOTP: (phone: string) => Promise<SendOtpResponse>;
   verifyOTP: (phone: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -30,6 +31,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+
+  register: async (name: string, email: string, phone: string) => {
+    await authAPI.register({ name, email, phone });
+  },
 
   sendOTP: async (phone: string) => {
     const { data } = await authAPI.sendOTP(phone);

@@ -14,6 +14,10 @@ from app.schemas.schemas import UserOut, UserUpdate, PhoneCheckRequest, PhoneChe
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def _is_registered_user(user: User) -> bool:
+    return bool(user.name and user.email)
+
+
 @router.get("/me", response_model=UserOut)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
@@ -102,13 +106,18 @@ async def register_push_token(
 @router.post("/check-phone", response_model=PhoneCheckResponse)
 async def check_phone_registered(
     body: PhoneCheckRequest,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Check if a phone number is registered in the system."""
     result = await db.execute(select(User).where(User.phone == body.phone))
     user = result.scalar_one_or_none()
 
-    if user:
-        return PhoneCheckResponse(registered=True, user_name=user.name)
-    return PhoneCheckResponse(registered=False, user_name=None)
+    if user and _is_registered_user(user):
+        return PhoneCheckResponse(
+            registered=True,
+            user_id=user.id,
+            phone=user.phone,
+            user_name=user.name,
+        )
+
+    return PhoneCheckResponse(registered=False, user_id=None, phone=None, user_name=None)

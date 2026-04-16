@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
 import { Avatar, Badge, Button, Card, Input, EmptyState, StatusBadge } from '../components/ui';
-import { auditAPI, expensesAPI, groupsAPI, settlementsAPI, getApiErrorMessage } from '../services/api';
-import { AuditLog, Expense, Group, GroupBalances } from '../types';
+import { auditAPI, expensesAPI, groupsAPI, settlementsAPI, usersAPI, getApiErrorMessage } from '../services/api';
+import { AuditLog, Expense, Group, GroupBalances, PhoneCheckResult } from '../types';
 import { Radius, Shadow, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
@@ -30,6 +30,7 @@ export default function GroupDetailScreen() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [memberPhone, setMemberPhone] = useState('');
+  const [memberLookup, setMemberLookup] = useState<PhoneCheckResult | null>(null);
   const [memberError, setMemberError] = useState('');
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
@@ -84,16 +85,40 @@ export default function GroupDetailScreen() {
   const isAdmin = (groupQuery.data?.members || []).some((member) => member.user.id === user?.id && member.role === 'admin');
 
   const addMember = useMutation({
-    mutationFn: () => groupsAPI.addMember(Number(id), memberPhone),
+    mutationFn: () => {
+      if (!memberLookup?.registered || !memberLookup.user_id) {
+        throw new Error('Select a registered user before adding');
+      }
+      return groupsAPI.addMember(Number(id), { user_id: memberLookup.user_id });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['group', id] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       setShowAddMember(false);
       setMemberPhone('');
+      setMemberLookup(null);
       setMemberError('');
     },
     onError: (error: unknown) => {
       setMemberError(getApiErrorMessage(error, 'Failed to add member'));
+    },
+  });
+
+  const checkMemberPhone = useMutation({
+    mutationFn: () => usersAPI.checkPhoneRegistration(memberPhone),
+    onSuccess: (result) => {
+      if (!result.registered) {
+        setMemberLookup(null);
+        setMemberError('This phone number is not registered. Ask the user to sign up first.');
+        return;
+      }
+
+      setMemberLookup(result);
+      setMemberError('');
+    },
+    onError: (error: unknown) => {
+      setMemberLookup(null);
+      setMemberError(getApiErrorMessage(error, 'Failed to verify phone number'));
     },
   });
 
@@ -165,6 +190,7 @@ export default function GroupDetailScreen() {
   const closeAddMemberModal = () => {
     setShowAddMember(false);
     setMemberPhone('');
+    setMemberLookup(null);
     setMemberError('');
   };
 
@@ -366,21 +392,39 @@ export default function GroupDetailScreen() {
         <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Add Member</Text>
-            <Text style={[styles.modalCopy, { color: colors.textSecondary }]}>In dev mode, adding a new phone number will create a placeholder account automatically.</Text>
+            <Text style={[styles.modalCopy, { color: colors.textSecondary }]}>Only users already registered in SplitSure can be added to this group.</Text>
             <Input
               label="Phone Number"
               value={memberPhone}
               onChangeText={(value) => {
                 setMemberPhone(value);
+                setMemberLookup(null);
                 setMemberError('');
               }}
               error={memberError}
               placeholder="+91 9876543210"
               keyboardType="phone-pad"
             />
+            {memberLookup?.registered ? (
+              <Text style={[styles.modalCopy, { color: colors.secondary }]}>Ready to add: {memberLookup.user_name || memberLookup.phone}</Text>
+            ) : null}
             <View style={styles.modalActions}>
               <Button title="Cancel" onPress={closeAddMemberModal} style={{ flex: 1 }} variant="ghost" />
-              <Button title="Add" onPress={() => addMember.mutate()} style={{ flex: 1.3 }} loading={addMember.isPending} />
+              <Button
+                title="Verify"
+                onPress={() => checkMemberPhone.mutate()}
+                style={{ flex: 1.1 }}
+                variant="secondary"
+                loading={checkMemberPhone.isPending}
+                disabled={!memberPhone.trim()}
+              />
+              <Button
+                title="Add"
+                onPress={() => addMember.mutate()}
+                style={{ flex: 1.2 }}
+                loading={addMember.isPending}
+                disabled={!memberLookup?.registered}
+              />
             </View>
           </Card>
         </View>

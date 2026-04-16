@@ -155,6 +155,8 @@ export const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
 // ─── Phone Registration ──────────────────────────────────────────────────────
 export interface PhoneCheckResult {
   registered: boolean;
+  user_id: number | null;
+  phone: string | null;
   user_name: string | null;
 }
 

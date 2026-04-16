@@ -8,8 +8,9 @@ import { AppBackdrop } from '../components/chrome';
 import { Button, Card, Input } from '../components/ui';
 import { Radius, Shadow, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
+import { usersAPI } from '../services/api';
 
-type Step = 'splash' | 'phone' | 'otp';
+type Step = 'splash' | 'phone' | 'register' | 'otp';
 const OTP_LENGTH = 6;
 
 function getAuthErrorMessage(error: unknown, fallback: string) {
@@ -31,10 +32,12 @@ function getAuthErrorMessage(error: unknown, fallback: string) {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { sendOTP, verifyOTP } = useAuthStore();
+  const { register, sendOTP, verifyOTP } = useAuthStore();
   const { colors, isDark } = useTheme();
   const [step, setStep] = useState<Step>('splash');
   const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState<string[]>(Array.from({ length: OTP_LENGTH }, () => ''));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -46,6 +49,7 @@ export default function LoginScreen() {
   }, []);
 
   const cleanedPhone = phone.replace(/\D/g, '');
+  const fullPhone = `+91${cleanedPhone}`;
 
   useEffect(() => {
     if (step !== 'otp') return;
@@ -89,7 +93,16 @@ export default function LoginScreen() {
     otpRefs.current[Math.min(digits.length, OTP_LENGTH - 1)]?.focus();
   };
 
-  const handleSendOtp = async () => {
+  const startOtpLogin = async () => {
+    const result = await sendOTP(fullPhone);
+    setStep('otp');
+    if (result.dev_otp) {
+      const devOtpValue = String(result.dev_otp).slice(0, OTP_LENGTH);
+      setTimeout(() => fillOtpFromCode(devOtpValue), 150);
+    }
+  };
+
+  const handlePhoneContinue = async () => {
     if (cleanedPhone.length !== 10) {
       setError('Enter a valid 10-digit mobile number');
       return;
@@ -98,14 +111,47 @@ export default function LoginScreen() {
     setLoading(true);
     setError('');
     try {
-      const result = await sendOTP(`+91${cleanedPhone}`);
-      setStep('otp');
-      if (result.dev_otp) {
-        const devOtpValue = String(result.dev_otp).slice(0, OTP_LENGTH);
-        setTimeout(() => fillOtpFromCode(devOtpValue), 150);
+      const lookup = await usersAPI.checkPhoneRegistration(fullPhone);
+      if (!lookup.registered) {
+        setStep('register');
+        return;
       }
+
+      await startOtpLogin();
     } catch (err) {
-      setError(getAuthErrorMessage(err, 'Failed to send OTP'));
+      setError(getAuthErrorMessage(err, 'Failed to continue login'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (cleanedPhone.length !== 10) {
+      setError('Enter a valid 10-digit mobile number');
+      setStep('phone');
+      return;
+    }
+
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedName) {
+      setError('Name is required');
+      return;
+    }
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalizedEmail)) {
+      setError('Enter a valid email address');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      await register(normalizedName, normalizedEmail, fullPhone);
+      await startOtpLogin();
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Registration failed'));
     } finally {
       setLoading(false);
     }
@@ -202,7 +248,43 @@ export default function LoginScreen() {
                   leftAddon={<Text style={[styles.phonePrefix, { color: colors.primary }]}>+91</Text>}
                   error={error}
                 />
-                <Button title="SEND OTP" onPress={handleSendOtp} loading={loading} />
+                <Button title="CONTINUE" onPress={handlePhoneContinue} loading={loading} />
+              </>
+            ) : step === 'register' ? (
+              <>
+                <Text style={[styles.otpHeading, { color: colors.textPrimary }]}>Create Account</Text>
+                <Text style={[styles.otpCopy, { color: colors.textSecondary }]}>This phone number is not registered. Complete signup to continue.</Text>
+                <Input
+                  label="Phone Number"
+                  value={fullPhone}
+                  editable={false}
+                  selectTextOnFocus={false}
+                />
+                <Input
+                  label="Full Name"
+                  value={name}
+                  onChangeText={(value) => {
+                    setName(value);
+                    setError('');
+                  }}
+                  placeholder="Enter your full name"
+                />
+                <Input
+                  label="Email"
+                  value={email}
+                  onChangeText={(value) => {
+                    setEmail(value);
+                    setError('');
+                  }}
+                  placeholder="Enter your email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
+                <Button title="CREATE ACCOUNT" onPress={handleRegister} loading={loading} />
+                <Pressable onPress={() => setStep('phone')} style={{ marginTop: Spacing.base }}>
+                  <Text style={[styles.changeNumber, { color: colors.primary }]}>Change number</Text>
+                </Pressable>
               </>
             ) : (
               <>

@@ -2,6 +2,7 @@ import axios, { AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { ExpenseCategory, SplitType } from '../types';
+import type { PhoneCheckResult } from '../types';
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof AxiosError) {
@@ -141,6 +142,8 @@ api.interceptors.response.use(
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 export const authAPI = {
+  register: (data: { name: string; email: string; phone: string }) =>
+    api.post('/auth/register', data, { timeout: AUTH_TIMEOUT_MS }),
   sendOTP: async (phone: string) => {
     try {
       await ensureBackendAwake();
@@ -180,7 +183,7 @@ export const usersAPI = {
   registerPushToken: (push_token: string) =>
     api.post('/users/me/push-token', { push_token }),
   checkPhoneRegistration: (phone: string) =>
-    api.post('/users/check-phone', { phone }).then(res => res.data),
+    api.post('/users/check-phone', { phone }).then(res => res.data as PhoneCheckResult),
 };
 
 // ── Groups ────────────────────────────────────────────────────────────────
@@ -193,8 +196,8 @@ export const groupsAPI = {
     api.patch(`/groups/${id}`, data),
   archive: (id: number) => api.delete(`/groups/${id}`),
   unarchive: (id: number) => api.post(`/groups/${id}/unarchive`),
-  addMember: (groupId: number, phone: string) =>
-    api.post(`/groups/${groupId}/members`, { phone }),
+  addMember: (groupId: number, payload: { phone?: string; user_id?: number }) =>
+    api.post(`/groups/${groupId}/members`, payload),
   removeMember: (groupId: number, userId: number) =>
     api.delete(`/groups/${groupId}/members/${userId}`),
   createInvite: (groupId: number) => api.post(`/groups/${groupId}/invite`),
