@@ -34,7 +34,7 @@ export default function GroupsScreen() {
   const [inviteError, setInviteError] = useState('');
 
   const groupsQuery = useQuery({
-    queryKey: ['groups'],
+    queryKey: ['groups', user?.id],
     queryFn: async () => {
       const { data } = await groupsAPI.list();
       return data as Group[];

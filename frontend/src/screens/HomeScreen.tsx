@@ -22,7 +22,7 @@ export default function HomeScreen() {
   const { user } = useAuthStore();
 
   const groupsQuery = useQuery({
-    queryKey: ['groups'],
+    queryKey: ['groups', user?.id],
     queryFn: async () => {
       const { data } = await groupsAPI.list();
       return data as Group[];

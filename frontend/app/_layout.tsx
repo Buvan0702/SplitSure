@@ -1,5 +1,5 @@
 // app/_layout.tsx — Root layout
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -28,12 +28,27 @@ const queryClient = new QueryClient({
 
 // Inner component that has access to theme context
 function ThemedRootLayout() {
-  const { loadUser } = useAuthStore();
+  const { loadUser, user, isAuthenticated } = useAuthStore();
   const { colors, isDark } = useTheme();
+  const authIdentityRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadUser();
   }, []);
+
+  useEffect(() => {
+    const nextIdentity = isAuthenticated && user ? `user:${user.id}` : 'guest';
+
+    if (authIdentityRef.current === null) {
+      authIdentityRef.current = nextIdentity;
+      return;
+    }
+
+    if (authIdentityRef.current !== nextIdentity) {
+      queryClient.clear();
+      authIdentityRef.current = nextIdentity;
+    }
+  }, [isAuthenticated, user?.id]);
 
   // Handle notification taps (deep link routing could be added here)
   useEffect(() => {

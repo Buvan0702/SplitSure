@@ -16,7 +16,7 @@ export default function ActivityScreen() {
   const { user } = useAuthStore();
 
   const groupsQuery = useQuery({
-    queryKey: ['groups'],
+    queryKey: ['groups', user?.id],
     queryFn: async () => {
       const { data } = await groupsAPI.list();
       return data as Group[];
@@ -24,7 +24,7 @@ export default function ActivityScreen() {
   });
 
   const activityQuery = useQuery({
-    queryKey: ['recent-expenses', groupsQuery.data?.map((group) => group.id).join(',')],
+    queryKey: ['recent-expenses', user?.id, groupsQuery.data?.map((group) => group.id).join(',')],
     enabled: !!groupsQuery.data?.length,
     queryFn: async () => {
       const result = await Promise.all(
