@@ -3,6 +3,12 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { ExpenseCategory, SplitType } from '../types';
 import type { PhoneCheckResult } from '../types';
+import type {
+  Invitation,
+  InvitationActionResponse,
+  InvitationCreateResponse,
+  InvitationLinkValidation,
+} from '../types';
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof AxiosError) {
@@ -202,6 +208,24 @@ export const groupsAPI = {
     api.delete(`/groups/${groupId}/members/${userId}`),
   createInvite: (groupId: number) => api.post(`/groups/${groupId}/invite`),
   joinViaInvite: (token: string) => api.post(`/groups/join/${token}`),
+};
+
+// ── Invitations ───────────────────────────────────────────────────────
+export const invitationsAPI = {
+  sendInvite: (groupId: number, payload: { invitee_user_id?: number; phone?: string; email?: string; message?: string }) =>
+    api.post(`/groups/${groupId}/invitations`, payload).then((res) => res.data as InvitationCreateResponse),
+  listPending: () =>
+    api.get('/invitations/pending').then((res) => res.data as Invitation[]),
+  accept: (invitationId: number) =>
+    api.post(`/invitations/${invitationId}/accept`).then((res) => res.data as InvitationActionResponse),
+  reject: (invitationId: number) =>
+    api.post(`/invitations/${invitationId}/reject`).then((res) => res.data as InvitationActionResponse),
+  validateLink: (token: string) =>
+    api.get(`/invitations/link/${token}`).then((res) => res.data as InvitationLinkValidation),
+  acceptViaLink: (token: string) =>
+    api.post(`/invitations/link/${token}/accept`).then((res) => res.data as InvitationActionResponse),
+  rejectViaLink: (token: string) =>
+    api.post(`/invitations/link/${token}/reject`).then((res) => res.data as InvitationActionResponse),
 };
 
 // ── Expenses ──────────────────────────────────────────────────────────────

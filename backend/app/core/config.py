@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 5
     INVITE_LINK_EXPIRE_HOURS: int = 72
     INVITE_LINK_MAX_USES: int = 10
+    INVITE_DEEP_LINK_BASE: str = "splitsure://join"
 
     @field_validator("OTP_EXPIRE_MINUTES")
     @classmethod

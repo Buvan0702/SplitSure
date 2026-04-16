@@ -1,19 +1,49 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { AppBackdrop, TopBar } from '../components/chrome';
-import { Card, EmptyState } from '../components/ui';
-import { expensesAPI, groupsAPI } from '../services/api';
-import { Expense, Group } from '../types';
+import { Button, Card, EmptyState } from '../components/ui';
+import { expensesAPI, getApiErrorMessage, groupsAPI, invitationsAPI } from '../services/api';
+import { Expense, Group, Invitation } from '../types';
 import { Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
 export default function ActivityScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
+
+  const pendingInvitesQuery = useQuery({
+    queryKey: ['pending-invitations', user?.id],
+    queryFn: () => invitationsAPI.listPending(),
+    refetchInterval: 15_000,
+    staleTime: 5_000,
+  });
+
+  const acceptInvite = useMutation({
+    mutationFn: (invitationId: number) => invitationsAPI.accept(invitationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations'] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      Alert.alert('Joined group', 'Invitation accepted successfully.');
+    },
+    onError: (error: unknown) => {
+      Alert.alert('Unable to accept invite', getApiErrorMessage(error, 'Failed to accept invitation'));
+    },
+  });
+
+  const rejectInvite = useMutation({
+    mutationFn: (invitationId: number) => invitationsAPI.reject(invitationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations'] });
+    },
+    onError: (error: unknown) => {
+      Alert.alert('Unable to reject invite', getApiErrorMessage(error, 'Failed to reject invitation'));
+    },
+  });
 
   const groupsQuery = useQuery({
     queryKey: ['groups', user?.id],
@@ -41,12 +71,52 @@ export default function ActivityScreen() {
     <AppBackdrop>
       <TopBar
         title="ACTIVITY"
-        subtitle="Recent proof-locked movement"
+        subtitle="Invitations and recent proof-locked movement"
         userName={user?.name || user?.phone}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={[styles.overline, { color: colors.textSecondary }]}>LEDGER FEED</Text>
         <Text style={[styles.title, { color: colors.textPrimary }]}>The latest expense events across your active networks.</Text>
+
+        <View style={styles.invitesSection}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Pending Invitations</Text>
+          {pendingInvitesQuery.isLoading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: 12 }} />
+          ) : pendingInvitesQuery.data?.length ? (
+            pendingInvitesQuery.data.map((invitation, index) => (
+              <Animated.View key={invitation.id} entering={FadeInDown.delay(index * 70).springify().damping(80)}>
+                <Card style={styles.inviteCard}>
+                  <Text style={[styles.inviteTitle, { color: colors.textPrimary }]}>{invitation.group_name}</Text>
+                  <Text style={[styles.inviteMeta, { color: colors.textSecondary }]}>
+                    Invited by {invitation.inviter_name} • {new Date(invitation.created_at).toLocaleString()}
+                  </Text>
+                  {invitation.message ? (
+                    <Text style={[styles.inviteMessage, { color: colors.textSecondary }]}>{invitation.message}</Text>
+                  ) : null}
+                  <View style={styles.inviteActions}>
+                    <Button
+                      title="Reject"
+                      onPress={() => rejectInvite.mutate(invitation.id)}
+                      variant="ghost"
+                      style={{ flex: 1 }}
+                      loading={rejectInvite.isPending && rejectInvite.variables === invitation.id}
+                    />
+                    <Button
+                      title="Accept"
+                      onPress={() => acceptInvite.mutate(invitation.id)}
+                      style={{ flex: 1 }}
+                      loading={acceptInvite.isPending && acceptInvite.variables === invitation.id}
+                    />
+                  </View>
+                </Card>
+              </Animated.View>
+            ))
+          ) : (
+            <Card style={styles.inviteEmptyCard}>
+              <Text style={[styles.inviteEmptyText, { color: colors.textSecondary }]}>No pending invitations right now.</Text>
+            </Card>
+          )}
+        </View>
 
         {activityQuery.isLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 36 }} />
@@ -95,6 +165,41 @@ const styles = StyleSheet.create({
     lineHeight: 38,
     fontWeight: '800',
     marginBottom: Spacing.xl,
+  },
+  invitesSection: {
+    marginBottom: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: Typography.lg,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  inviteCard: {
+    marginBottom: Spacing.sm,
+  },
+  inviteTitle: {
+    fontSize: Typography.md,
+    fontWeight: '800',
+  },
+  inviteMeta: {
+    fontSize: Typography.sm,
+    marginTop: 6,
+  },
+  inviteMessage: {
+    fontSize: Typography.base,
+    marginTop: 8,
+  },
+  inviteActions: {
+    marginTop: Spacing.base,
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  inviteEmptyCard: {
+    marginBottom: Spacing.sm,
+  },
+  inviteEmptyText: {
+    fontSize: Typography.base,
   },
   itemCard: {
     marginBottom: Spacing.md,

@@ -26,6 +26,13 @@ class SettlementStatus(str, enum.Enum):
     DISPUTED = "disputed"
 
 
+class InvitationStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
 class ExpenseCategory(str, enum.Enum):
     FOOD = "food"
     TRANSPORT = "transport"
@@ -65,6 +72,16 @@ class User(Base):
     # Relationships
     group_memberships: Mapped[list["GroupMember"]] = relationship("GroupMember", back_populates="user")
     expenses_paid: Mapped[list["Expense"]] = relationship("Expense", back_populates="paid_by_user", foreign_keys="Expense.paid_by")
+    invitations_sent: Mapped[list["Invitation"]] = relationship(
+        "Invitation",
+        back_populates="inviter",
+        foreign_keys="Invitation.inviter_id",
+    )
+    invitations_received: Mapped[list["Invitation"]] = relationship(
+        "Invitation",
+        back_populates="invitee_user",
+        foreign_keys="Invitation.invitee_user_id",
+    )
 
 
 class OTPRecord(Base):
@@ -104,6 +121,7 @@ class Group(Base):
     settlements: Mapped[list["Settlement"]] = relationship("Settlement", back_populates="group")
     audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="group")
     invite_links: Mapped[list["InviteLink"]] = relationship("InviteLink", back_populates="group")
+    invitations: Mapped[list["Invitation"]] = relationship("Invitation", back_populates="group")
 
 
 class GroupMember(Base):
@@ -231,3 +249,30 @@ class InviteLink(Base):
 
     # Relationships
     group: Mapped["Group"] = relationship("Group", back_populates="invite_links")
+
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id"), nullable=False, index=True)
+    inviter_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    invitee_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    invitee_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
+    invitee_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    token_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    status: Mapped[InvitationStatus] = mapped_column(Enum(InvitationStatus), default=InvitationStatus.PENDING, index=True)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    group: Mapped["Group"] = relationship("Group", back_populates="invitations")
+    inviter: Mapped["User"] = relationship("User", back_populates="invitations_sent", foreign_keys=[inviter_id])
+    invitee_user: Mapped[Optional["User"]] = relationship(
+        "User",
+        back_populates="invitations_received",
+        foreign_keys=[invitee_user_id],
+    )

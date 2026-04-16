@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MaterialIcons } from '@expo/vector-icons';
 import { AppBackdrop, FloatingDock, TopBar } from '../components/chrome';
 import { Avatar, Badge, Button, Card, Input, EmptyState, StatusBadge } from '../components/ui';
-import { auditAPI, expensesAPI, groupsAPI, settlementsAPI, usersAPI, getApiErrorMessage } from '../services/api';
-import { AuditLog, Expense, Group, GroupBalances, PhoneCheckResult } from '../types';
+import { auditAPI, expensesAPI, groupsAPI, invitationsAPI, settlementsAPI, getApiErrorMessage } from '../services/api';
+import { AuditLog, Expense, Group, GroupBalances } from '../types';
 import { Radius, Shadow, Spacing, Typography, useTheme } from '../utils/theme';
 import { useAuthStore } from '../store/authStore';
 
@@ -27,11 +27,11 @@ export default function GroupDetailScreen() {
   const { user } = useAuthStore();
   const { colors, isDark } = useTheme();
   const [tab, setTab] = useState<GroupTab>('expenses');
-  const [showAddMember, setShowAddMember] = useState(false);
+  const [showInviteMember, setShowInviteMember] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [memberPhone, setMemberPhone] = useState('');
-  const [memberLookup, setMemberLookup] = useState<PhoneCheckResult | null>(null);
-  const [memberError, setMemberError] = useState('');
+  const [inviteIdentifier, setInviteIdentifier] = useState('');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [inviteError, setInviteError] = useState('');
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
   const [groupError, setGroupError] = useState('');
@@ -84,41 +84,50 @@ export default function GroupDetailScreen() {
 
   const isAdmin = (groupQuery.data?.members || []).some((member) => member.user.id === user?.id && member.role === 'admin');
 
-  const addMember = useMutation({
+  const inviteMember = useMutation({
     mutationFn: () => {
-      if (!memberLookup?.registered || !memberLookup.user_id) {
-        throw new Error('Select a registered user before adding');
+      const identifier = inviteIdentifier.trim();
+      if (!identifier) {
+        throw new Error('Phone number or email is required');
       }
-      return groupsAPI.addMember(Number(id), { user_id: memberLookup.user_id });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['group', id] });
-      queryClient.invalidateQueries({ queryKey: ['groups'] });
-      setShowAddMember(false);
-      setMemberPhone('');
-      setMemberLookup(null);
-      setMemberError('');
-    },
-    onError: (error: unknown) => {
-      setMemberError(getApiErrorMessage(error, 'Failed to add member'));
-    },
-  });
+      const payload: { invitee_user_id?: number; phone?: string; email?: string; message?: string } = {};
+      if (identifier.includes('@')) {
+        payload.email = identifier;
+      } else {
+        payload.phone = identifier;
+      }
 
-  const checkMemberPhone = useMutation({
-    mutationFn: () => usersAPI.checkPhoneRegistration(memberPhone),
-    onSuccess: (result) => {
-      if (!result.registered) {
-        setMemberLookup(null);
-        setMemberError('This phone number is not registered. Ask the user to sign up first.');
+      const message = inviteMessage.trim();
+      if (message) {
+        payload.message = message;
+      }
+
+      return invitationsAPI.sendInvite(Number(id), payload);
+    },
+    onSuccess: async (response) => {
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations'] });
+      setShowInviteMember(false);
+      setInviteIdentifier('');
+      setInviteMessage('');
+      setInviteError('');
+
+      if (response.delivery_channel === 'link' && response.invite_url) {
+        const expiresAt = response.invitation.token_expires_at
+          ? new Date(response.invitation.token_expires_at).toLocaleString()
+          : 'soon';
+        const message = `Join my SplitSure group ${response.invitation.group_name}:\n\n${response.invite_url}\n\nThis invite expires on ${expiresAt}.`;
+        try {
+          await Share.share({ message });
+        } catch {
+          Alert.alert('Invite link created', message);
+        }
         return;
       }
 
-      setMemberLookup(result);
-      setMemberError('');
+      Alert.alert('Invitation sent', `An in-app invitation was sent for ${response.invitation.group_name}.`);
     },
     onError: (error: unknown) => {
-      setMemberLookup(null);
-      setMemberError(getApiErrorMessage(error, 'Failed to verify phone number'));
+      setInviteError(getApiErrorMessage(error, 'Failed to send invitation'));
     },
   });
 
@@ -157,21 +166,6 @@ export default function GroupDetailScreen() {
     },
   });
 
-  const createInvite = useMutation({
-    mutationFn: () => groupsAPI.createInvite(Number(id)),
-    onSuccess: async ({ data }) => {
-      const message = `Join my SplitSure group using this invite token:\n\n${data.token}\n\nIt expires on ${new Date(data.expires_at).toLocaleString()}.`;
-      try {
-        await Share.share({ message });
-      } catch {
-        Alert.alert('Invite ready', message);
-      }
-    },
-    onError: (error: unknown) => {
-      Alert.alert('Unable to create invite', getApiErrorMessage(error, 'Failed to create invite'));
-    },
-  });
-
   const memberBalances = useMemo(() => {
     const lookup = new Map((balancesQuery.data?.balances || []).map((item) => [item.user.id, item.net_balance]));
     return (groupQuery.data?.members || []).map((member) => ({
@@ -187,11 +181,11 @@ export default function GroupDetailScreen() {
     setShowSettings(true);
   };
 
-  const closeAddMemberModal = () => {
-    setShowAddMember(false);
-    setMemberPhone('');
-    setMemberLookup(null);
-    setMemberError('');
+  const closeInviteModal = () => {
+    setShowInviteMember(false);
+    setInviteIdentifier('');
+    setInviteMessage('');
+    setInviteError('');
   };
 
   const closeSettingsModal = () => {
@@ -259,8 +253,7 @@ export default function GroupDetailScreen() {
 
         {isAdmin ? (
           <View style={styles.actionRow}>
-            <Button title="Add Member" onPress={() => setShowAddMember(true)} style={{ flex: 1 }} variant="secondary" size="sm" />
-            <Button title="Share Invite" onPress={() => createInvite.mutate()} style={{ flex: 1 }} loading={createInvite.isPending} size="sm" />
+            <Button title="Invite Member" onPress={() => setShowInviteMember(true)} style={{ flex: 1 }} variant="secondary" size="sm" />
             <Button title="Edit Group" onPress={openSettings} style={{ flex: 1 }} variant="ghost" size="sm" />
           </View>
         ) : null}
@@ -388,42 +381,39 @@ export default function GroupDetailScreen() {
       </Pressable>
       <FloatingDock current="groups" />
 
-      <Modal animationType="slide" transparent visible={showAddMember}>
+      <Modal animationType="slide" transparent visible={showInviteMember}>
         <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Add Member</Text>
-            <Text style={[styles.modalCopy, { color: colors.textSecondary }]}>Only users already registered in SplitSure can be added to this group.</Text>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Invite Member</Text>
+            <Text style={[styles.modalCopy, { color: colors.textSecondary }]}>Enter a phone number or email. Registered users get an in-app invite, others get a secure shareable link.</Text>
             <Input
-              label="Phone Number"
-              value={memberPhone}
+              label="Phone or Email"
+              value={inviteIdentifier}
               onChangeText={(value) => {
-                setMemberPhone(value);
-                setMemberLookup(null);
-                setMemberError('');
+                setInviteIdentifier(value);
+                setInviteError('');
               }}
-              error={memberError}
-              placeholder="+91 9876543210"
-              keyboardType="phone-pad"
+              error={inviteError}
+              placeholder="+91 9876543210 or name@example.com"
+              autoCapitalize="none"
+              autoCorrect={false}
             />
-            {memberLookup?.registered ? (
-              <Text style={[styles.modalCopy, { color: colors.secondary }]}>Ready to add: {memberLookup.user_name || memberLookup.phone}</Text>
-            ) : null}
+            <Input
+              label="Message (Optional)"
+              value={inviteMessage}
+              onChangeText={setInviteMessage}
+              placeholder="Join our SplitSure group"
+              autoCapitalize="sentences"
+              autoCorrect
+            />
             <View style={styles.modalActions}>
-              <Button title="Cancel" onPress={closeAddMemberModal} style={{ flex: 1 }} variant="ghost" />
+              <Button title="Cancel" onPress={closeInviteModal} style={{ flex: 1 }} variant="ghost" />
               <Button
-                title="Verify"
-                onPress={() => checkMemberPhone.mutate()}
-                style={{ flex: 1.1 }}
-                variant="secondary"
-                loading={checkMemberPhone.isPending}
-                disabled={!memberPhone.trim()}
-              />
-              <Button
-                title="Add"
-                onPress={() => addMember.mutate()}
+                title="Send Invite"
+                onPress={() => inviteMember.mutate()}
                 style={{ flex: 1.2 }}
-                loading={addMember.isPending}
-                disabled={!memberLookup?.registered}
+                loading={inviteMember.isPending}
+                disabled={!inviteIdentifier.trim()}
               />
             </View>
           </Card>

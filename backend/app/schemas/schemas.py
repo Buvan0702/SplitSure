@@ -1,8 +1,8 @@
 import re
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime
-from app.models.user import SplitType, MemberRole, SettlementStatus, ExpenseCategory, AuditEventType
+from app.models.user import SplitType, MemberRole, SettlementStatus, ExpenseCategory, AuditEventType, InvitationStatus
 
 
 # ─── Auth ───────────────────────────────────────────────────────────────────
@@ -268,6 +268,106 @@ class InviteLinkOut(BaseModel):
     expires_at: datetime
     use_count: int
     max_uses: int
+
+
+class InvitationCreateRequest(BaseModel):
+    invitee_user_id: Optional[int] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    message: Optional[str] = None
+
+    @field_validator("invitee_user_id")
+    @classmethod
+    def validate_invitee_user_id(cls, v: Optional[int]):
+        if v is None:
+            return v
+        if v <= 0:
+            raise ValueError("invitee_user_id must be a positive integer")
+        return v
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip().replace(" ", "")
+        if not value:
+            return None
+        if not value.startswith("+"):
+            value = "+91" + value
+        if len(value) < 10:
+            raise ValueError("Invalid phone number")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip().lower()
+        if not value:
+            return None
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("Enter a valid email address")
+        return value
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v: Optional[str]):
+        if v is None:
+            return v
+        value = v.strip()
+        if not value:
+            return None
+        if len(value) > 500:
+            raise ValueError("Message must be 500 characters or fewer")
+        return value
+
+    @model_validator(mode="after")
+    def validate_identifier(self):
+        provided = [
+            self.invitee_user_id is not None,
+            bool(self.phone),
+            bool(self.email),
+        ]
+        if sum(provided) != 1:
+            raise ValueError("Provide exactly one identifier: invitee_user_id, phone, or email")
+        return self
+
+
+class InvitationOut(BaseModel):
+    id: int
+    group_id: int
+    group_name: str
+    inviter_id: int
+    inviter_name: str
+    inviter_phone: str
+    invitee_user_id: Optional[int]
+    invitee_phone: Optional[str]
+    invitee_email: Optional[str]
+    status: InvitationStatus
+    message: Optional[str]
+    created_at: datetime
+    responded_at: Optional[datetime]
+    token_expires_at: Optional[datetime]
+    is_link_invite: bool
+
+
+class InvitationCreateResponse(BaseModel):
+    invitation: InvitationOut
+    delivery_channel: Literal["in_app", "link"]
+    invite_url: Optional[str] = None
+
+
+class InvitationActionResponse(BaseModel):
+    invitation: InvitationOut
+    group: Optional[GroupOut] = None
+
+
+class InvitationLinkValidationOut(BaseModel):
+    invitation: InvitationOut
+    is_valid: bool
+    reason: Optional[str] = None
 
 
 # ─── Expense ─────────────────────────────────────────────────────────────────

@@ -70,3 +70,36 @@ async def notify_group_invite(
         )
     except Exception as e:
         logger.warning(f"Failed to send group invite notification: {e}")
+
+
+async def notify_group_invitation(
+    db: AsyncSession,
+    user_id: int,
+    group_name: str,
+    inviter_name: str,
+    invitation_id: int,
+) -> None:
+    """
+    Send a push notification for a pending invitation.
+    Fire-and-forget, silently fail.
+    """
+    from app.models.user import User
+
+    try:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user or not user.push_token:
+            return
+
+        await send_push_notification(
+            push_token=user.push_token,
+            title="Group Invitation",
+            body=f"{inviter_name} invited you to join {group_name}",
+            data={
+                "type": "group_invite",
+                "group_name": group_name,
+                "invitation_id": invitation_id,
+            },
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send invitation notification: {e}")

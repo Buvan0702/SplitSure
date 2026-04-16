@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AxiosError } from 'axios';
 import { AppBackdrop } from '../components/chrome';
@@ -32,6 +32,7 @@ function getAuthErrorMessage(error: unknown, fallback: string) {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const { register, sendOTP, verifyOTP } = useAuthStore();
   const { colors, isDark } = useTheme();
   const [step, setStep] = useState<Step>('splash');
@@ -68,7 +69,10 @@ export default function LoginScreen() {
     setError('');
     try {
       await verifyOTP(`+91${cleanedPhone}`, normalizedCode);
-      router.replace('/(tabs)');
+      const redirectPath = typeof redirect === 'string' && redirect.startsWith('/')
+        ? redirect
+        : '/(tabs)';
+      router.replace(redirectPath);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Failed to verify OTP'));
       setOtp(Array.from({ length: OTP_LENGTH }, () => ''));

@@ -38,6 +38,43 @@ export interface Group {
   members: GroupMember[];
 }
 
+export type InvitationStatus = 'pending' | 'accepted' | 'rejected' | 'expired';
+
+export interface Invitation {
+  id: number;
+  group_id: number;
+  group_name: string;
+  inviter_id: number;
+  inviter_name: string;
+  inviter_phone: string;
+  invitee_user_id: number | null;
+  invitee_phone: string | null;
+  invitee_email: string | null;
+  status: InvitationStatus;
+  message: string | null;
+  created_at: string;
+  responded_at: string | null;
+  token_expires_at: string | null;
+  is_link_invite: boolean;
+}
+
+export interface InvitationCreateResponse {
+  invitation: Invitation;
+  delivery_channel: 'in_app' | 'link';
+  invite_url: string | null;
+}
+
+export interface InvitationActionResponse {
+  invitation: Invitation;
+  group: Group | null;
+}
+
+export interface InvitationLinkValidation {
+  invitation: Invitation;
+  is_valid: boolean;
+  reason: 'already_used' | 'rejected' | 'expired' | null;
+}
+
 // ─── Expense ─────────────────────────────────────────────────────────────────
 export type SplitType = 'equal' | 'exact' | 'percentage';
 export type ExpenseCategory = 'food' | 'transport' | 'accommodation' | 'utilities' | 'misc';

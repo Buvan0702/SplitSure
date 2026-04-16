@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.api.v1.endpoints.auth import register, send_otp, verify_otp, _hash_otp
-from app.api.v1.endpoints.groups import add_member
+from app.api.v1.endpoints.groups import add_member, list_my_groups
 from app.core.database import Base
 from app.models.user import Group, GroupMember, MemberRole, OTPRecord, User
 from app.schemas.schemas import AddMemberRequest, OTPRequest, OTPVerify, RegisterRequest
@@ -104,3 +104,28 @@ async def test_group_add_member_requires_registered_user(db_session: AsyncSessio
 
     assert added.user.id == registered_user.id
     assert added.is_registered is True
+
+
+@pytest.mark.asyncio
+async def test_groups_are_isolated_per_account(db_session: AsyncSession):
+    user_a = User(phone="+944444444444", name="User A", email="a@example.com")
+    user_b = User(phone="+955555555555", name="User B", email="b@example.com")
+    db_session.add_all([user_a, user_b])
+    await db_session.flush()
+
+    group_a = Group(name="Group A", description="A", created_by=user_a.id)
+    group_b = Group(name="Group B", description="B", created_by=user_b.id)
+    db_session.add_all([group_a, group_b])
+    await db_session.flush()
+
+    db_session.add_all([
+        GroupMember(group_id=group_a.id, user_id=user_a.id, role=MemberRole.ADMIN),
+        GroupMember(group_id=group_b.id, user_id=user_b.id, role=MemberRole.ADMIN),
+    ])
+    await db_session.commit()
+
+    user_a_groups = await list_my_groups(include_archived=False, current_user=user_a, db=db_session)
+    user_b_groups = await list_my_groups(include_archived=False, current_user=user_b, db=db_session)
+
+    assert [g.id for g in user_a_groups] == [group_a.id]
+    assert [g.id for g in user_b_groups] == [group_b.id]

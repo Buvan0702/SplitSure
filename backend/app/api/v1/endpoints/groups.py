@@ -1,4 +1,5 @@
 import secrets
+import hashlib
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +8,15 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.config import settings
-from app.models.user import Group, GroupMember, MemberRole, User, AuditEventType, InviteLink
+from app.models.user import (
+    Group,
+    GroupMember,
+    MemberRole,
+    User,
+    AuditEventType,
+    Invitation,
+    InvitationStatus,
+)
 from app.schemas.schemas import (
     GroupCreate, GroupUpdate, GroupOut, AddMemberRequest,
     InviteLinkOut, GroupMemberOut
@@ -16,6 +25,18 @@ from app.services.audit_service import log_event
 from app.services.push_service import notify_group_invite
 
 router = APIRouter(prefix="/groups", tags=["groups"])
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _normalize_datetime(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def _is_registered_user(user: User) -> bool:
@@ -246,17 +267,17 @@ async def create_invite_link(
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.INVITE_LINK_EXPIRE_HOURS)
 
-    invite = InviteLink(
+    invite = Invitation(
         group_id=group_id,
-        token=token,
-        created_by=current_user.id,
-        max_uses=settings.INVITE_LINK_MAX_USES,
-        expires_at=expires_at,
+        inviter_id=current_user.id,
+        token_hash=_hash_token(token),
+        token_expires_at=expires_at,
+        status=InvitationStatus.PENDING,
     )
     db.add(invite)
     await db.commit()
 
-    return InviteLinkOut(token=token, expires_at=expires_at, use_count=0, max_uses=invite.max_uses)
+    return InviteLinkOut(token=token, expires_at=expires_at, use_count=0, max_uses=1)
 
 
 @router.post("/join/{token}", response_model=GroupMemberOut)
@@ -266,28 +287,64 @@ async def join_via_invite(
     db: AsyncSession = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
-    result = await db.execute(select(InviteLink).where(InviteLink.token == token))
+    result = await db.execute(
+        select(Invitation)
+        .where(Invitation.token_hash == _hash_token(token))
+        .options(selectinload(Invitation.group))
+    )
     invite = result.scalar_one_or_none()
 
     if not invite:
         raise HTTPException(404, "Invalid invite link")
-    if invite.expires_at < now:
+
+    if invite.status == InvitationStatus.ACCEPTED:
+        raise HTTPException(400, "Invite link has already been used")
+    if invite.status == InvitationStatus.REJECTED:
+        raise HTTPException(400, "Invite link has already been rejected")
+    if invite.status == InvitationStatus.EXPIRED:
         raise HTTPException(400, "Invite link has expired")
-    if invite.use_count >= invite.max_uses:
-        raise HTTPException(400, "Invite link has reached its usage limit")
+    expires_at = _normalize_datetime(invite.token_expires_at)
+    if expires_at and expires_at <= now:
+        invite.status = InvitationStatus.EXPIRED
+        invite.responded_at = now
+        await db.commit()
+        raise HTTPException(400, "Invite link has expired")
+
+    if invite.invitee_user_id is not None and invite.invitee_user_id != current_user.id:
+        raise HTTPException(403, "This invite link is not for your account")
+    if invite.invitee_phone and invite.invitee_phone != current_user.phone:
+        raise HTTPException(403, "This invite link is not for your account")
+    if invite.invitee_email:
+        if not current_user.email or current_user.email.lower() != invite.invitee_email:
+            raise HTTPException(403, "This invite link is not for your account")
 
     existing = await _get_member(db, invite.group_id, current_user.id)
     if existing:
-        raise HTTPException(400, "Already a member of this group")
+        invite.status = InvitationStatus.ACCEPTED
+        invite.responded_at = now
+        if invite.invitee_user_id is None:
+            invite.invitee_user_id = current_user.id
+        await db.commit()
+
+        return GroupMemberOut(
+            id=existing.id,
+            user=current_user,
+            role=existing.role,
+            joined_at=existing.joined_at,
+            is_registered=_is_registered_user(current_user),
+        )
 
     member = GroupMember(group_id=invite.group_id, user_id=current_user.id, role=MemberRole.MEMBER)
     db.add(member)
-    invite.use_count += 1
+    invite.status = InvitationStatus.ACCEPTED
+    invite.responded_at = now
+    if invite.invitee_user_id is None:
+        invite.invitee_user_id = current_user.id
 
     await log_event(
         db, invite.group_id, AuditEventType.MEMBER_ADDED, current_user.id,
         entity_id=current_user.id,
-        metadata_json={"via": "invite_link"},
+        metadata_json={"via": "invite_link", "invitation_id": invite.id},
     )
 
     await db.commit()

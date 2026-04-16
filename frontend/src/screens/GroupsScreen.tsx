@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AppBackdrop, TopBar } from '../components/chrome';
 import { Button, Card, Input } from '../components/ui';
-import { groupsAPI, getApiErrorMessage } from '../services/api';
+import { groupsAPI, invitationsAPI, getApiErrorMessage } from '../services/api';
 import { Group } from '../types';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Radius, Spacing, Typography, useTheme } from '../utils/theme';
@@ -56,13 +56,29 @@ export default function GroupsScreen() {
   });
 
   const joinGroup = useMutation({
-    mutationFn: () => groupsAPI.joinViaInvite(inviteToken.trim()),
-    onSuccess: () => {
+    mutationFn: () => {
+      const rawInput = inviteToken.trim();
+      if (!rawInput) {
+        throw new Error('Invite token or link is required');
+      }
+
+      const normalized = rawInput.includes('/')
+        ? rawInput.split('/').filter(Boolean).pop() || ''
+        : rawInput;
+
+      if (!normalized) {
+        throw new Error('Invalid invite token');
+      }
+
+      return invitationsAPI.acceptViaLink(normalized);
+    },
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations'] });
       setShowJoin(false);
       setInviteToken('');
       setInviteError('');
-      Alert.alert('Joined group successfully');
+      Alert.alert('Joined group successfully', `You joined ${response.invitation.group_name}.`);
     },
     onError: (error: unknown) => {
       setInviteError(getApiErrorMessage(error, 'Failed to join group'));
@@ -154,16 +170,16 @@ export default function GroupsScreen() {
         <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
           <Card style={styles.modalCard}>
             <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Join Group</Text>
-            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>Paste the invite token shared by your group admin.</Text>
+            <Text style={[styles.modalSub, { color: colors.textSecondary }]}>Paste the invite link or token shared by your group admin.</Text>
             <Input
-              label="Invite Token"
+              label="Invite Link or Token"
               value={inviteToken}
               onChangeText={(value) => {
                 setInviteToken(value);
                 setInviteError('');
               }}
               error={inviteError}
-              placeholder="Paste invite token"
+              placeholder="splitsure://join/.... or token"
               autoCapitalize="none"
               autoCorrect={false}
             />
